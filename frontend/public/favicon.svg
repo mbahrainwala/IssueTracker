@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <title>Issue Tracker</title>
+  <rect width="64" height="64" rx="14.08" fill="#0052cc"/>
+  <g fill="#ffffff">
+    <rect x="13.76" y="15.04" width="8" height="34.56" rx="4"/>
+    <rect x="28.00" y="15.04" width="8" height="19.84" rx="4"/>
+    <rect x="42.24" y="15.04" width="8" height="27.52" rx="4"/>
+  </g>
+</svg>

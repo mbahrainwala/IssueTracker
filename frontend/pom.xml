@@ -1,0 +1,95 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <!--
+      Wraps `npm run build` as a Maven artifact. The Vite output lands in
+      META-INF/resources, which Spring Boot serves straight off the classpath,
+      so the backend jar ships the UI with it.
+
+      Day-to-day UI work does not need Maven at all - use `npm run dev`.
+    -->
+
+    <parent>
+        <groupId>behrainwala</groupId>
+        <artifactId>issue-tracker-parent</artifactId>
+        <version>0.0.1-SNAPSHOT</version>
+    </parent>
+
+    <artifactId>issue-tracker-frontend</artifactId>
+    <packaging>jar</packaging>
+    <name>issue-tracker-frontend</name>
+
+    <build>
+        <!--
+          Vite writes to dist/ during generate-resources (below); declaring it as a module
+          resource means the standard process-resources phase copies it into target/classes.
+          Do NOT move this into a prepare-package execution - IntelliJ's "Build Project" and
+          plain `mvn compile` never reach prepare-package, which leaves the UI out of the
+          classpath and greets you with a Whitelabel Error Page.
+        -->
+        <resources>
+            <resource>
+                <directory>${project.basedir}/dist</directory>
+                <targetPath>META-INF/resources</targetPath>
+            </resource>
+        </resources>
+
+        <plugins>
+            <plugin>
+                <groupId>com.github.eirslett</groupId>
+                <artifactId>frontend-maven-plugin</artifactId>
+                <configuration>
+                    <skip>${skip.frontend}</skip>
+                    <nodeVersion>${node.version}</nodeVersion>
+                    <npmVersion>${npm.version}</npmVersion>
+                    <installDirectory>${project.basedir}</installDirectory>
+                </configuration>
+                <executions>
+                    <execution>
+                        <id>install-node-and-npm</id>
+                        <phase>generate-resources</phase>
+                        <goals>
+                            <goal>install-node-and-npm</goal>
+                        </goals>
+                    </execution>
+                    <execution>
+                        <id>npm-install</id>
+                        <phase>generate-resources</phase>
+                        <goals>
+                            <goal>npm</goal>
+                        </goals>
+                        <configuration>
+                            <arguments>ci</arguments>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>npm-build</id>
+                        <phase>generate-resources</phase>
+                        <goals>
+                            <goal>npm</goal>
+                        </goals>
+                        <configuration>
+                            <arguments>run build</arguments>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+
+            <!-- `mvn clean` should also drop the Vite output, or a stale bundle lingers. -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-clean-plugin</artifactId>
+                <configuration>
+                    <filesets>
+                        <fileset>
+                            <directory>${project.basedir}/dist</directory>
+                        </fileset>
+                    </filesets>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+</project>
