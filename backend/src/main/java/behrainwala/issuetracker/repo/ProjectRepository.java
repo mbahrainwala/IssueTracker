@@ -25,52 +25,34 @@ public interface ProjectRepository extends JpaRepository<Project, Long> {
     Optional<Project> findByIdForUpdate(@Param("id") Long id);
 
     /**
-     * Projects the user is a member of, in any role. Members are fetched alongside so
-     * rendering the lead list does not fire a query per project.
+     * Projects the user is a member of, in any role, on one side of the archive flag.
+     * Members and the archiver are fetched alongside so rendering a list does not fire a
+     * query per project.
      */
     @Query("""
             select distinct p from Project p
             left join fetch p.members m
             left join fetch m.user
-            where p.archivedAt is null
+            left join fetch p.archivedBy
+            where (:archived = true and p.archivedAt is not null
+                or :archived = false and p.archivedAt is null)
               and exists (
                 select 1 from ProjectMember pm
                 where pm.project = p and pm.user.id = :userId
             )
             order by p.projectKey
             """)
-    List<Project> findAllForUser(@Param("userId") Long userId);
+    List<Project> findForUser(@Param("userId") Long userId, @Param("archived") boolean archived);
 
-    /** The archived tab, still scoped to what the user is assigned to. */
+    /** Admin view: every project on that side of the flag, same fetches for the same reason. */
     @Query("""
             select distinct p from Project p
             left join fetch p.members m
             left join fetch m.user
-            where p.archivedAt is not null
-              and exists (
-                select 1 from ProjectMember pm
-                where pm.project = p and pm.user.id = :userId
-            )
+            left join fetch p.archivedBy
+            where (:archived = true and p.archivedAt is not null
+                or :archived = false and p.archivedAt is null)
             order by p.projectKey
             """)
-    List<Project> findArchivedForUser(@Param("userId") Long userId);
-
-    /** Admin view: every project, members fetched for the same reason. */
-    @Query("""
-            select distinct p from Project p
-            left join fetch p.members m
-            left join fetch m.user
-            where p.archivedAt is null
-            order by p.projectKey
-            """)
-    List<Project> findAllWithMembers();
-
-    @Query("""
-            select distinct p from Project p
-            left join fetch p.members m
-            left join fetch m.user
-            where p.archivedAt is not null
-            order by p.projectKey
-            """)
-    List<Project> findArchivedWithMembers();
+    List<Project> findAllWithMembers(@Param("archived") boolean archived);
 }

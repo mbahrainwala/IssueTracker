@@ -4,7 +4,7 @@ import { ApiError, api } from '../api/client'
 import type { Project } from '../api/types'
 import Avatar from '../components/Avatar'
 import Modal from '../components/Modal'
-import { formatMovedAt } from '../components/StatusHistory'
+import { formatDateTime } from '../format'
 
 export default function ProjectsPage() {
   const [projects, setProjects] = useState<Project[]>([])
@@ -137,7 +137,7 @@ export default function ProjectsPage() {
               </div>
               {project.archived && project.archivedAt && (
                 <p className="muted archived-note">
-                  Archived {formatMovedAt(project.archivedAt)}
+                  Archived {formatDateTime(project.archivedAt)}
                   {project.archivedBy ? ` by ${project.archivedBy.displayName}` : ''}
                 </p>
               )}

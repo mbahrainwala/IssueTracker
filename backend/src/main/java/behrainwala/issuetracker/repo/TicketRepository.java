@@ -17,8 +17,6 @@ public interface TicketRepository extends JpaRepository<Ticket, Long> {
 
     List<Ticket> findByProjectIdOrderByTicketNumberDesc(Long projectId);
 
-    long countByProjectId(Long projectId);
-
     /** Project cards count live work, not the archive. */
     long countByProjectIdAndArchivedAtIsNull(Long projectId);
 
@@ -61,36 +59,37 @@ public interface TicketRepository extends JpaRepository<Ticket, Long> {
     List<Ticket> searchAll(@Param("q") String q, Pageable pageable);
 
     /**
-     * Status is bound as a string rather than the enum so a null value needs no
-     * explicit type hint for Hibernate's parameter inference. Archived tickets are a
-     * separate view, never mixed into the active one.
+     * The board and the archived tab are the same query on opposite sides of the archive
+     * flag, so {@code archived} picks the side rather than there being two copies to keep
+     * in sync. {@code archivedBy} is fetched because the archived tab renders it for every
+     * row. Status is bound as a string rather than the enum so a null value needs no
+     * explicit type hint for Hibernate's parameter inference.
      */
-    @Query("""
+    @Query(value = """
             select t from Ticket t
+            left join fetch t.archivedBy
             where t.project.id = :projectId
-              and t.archivedAt is null
+              and (:archived = true and t.archivedAt is not null
+                or :archived = false and t.archivedAt is null)
+              and (:status is null or str(t.status) = :status)
+              and (:assigneeId is null or t.assignee.id = :assigneeId)
+              and (:q is null or lower(t.title) like lower(concat('%', :q, '%'))
+                              or lower(t.ticketKey) like lower(concat('%', :q, '%')))
+            """,
+            countQuery = """
+            select count(t) from Ticket t
+            where t.project.id = :projectId
+              and (:archived = true and t.archivedAt is not null
+                or :archived = false and t.archivedAt is null)
               and (:status is null or str(t.status) = :status)
               and (:assigneeId is null or t.assignee.id = :assigneeId)
               and (:q is null or lower(t.title) like lower(concat('%', :q, '%'))
                               or lower(t.ticketKey) like lower(concat('%', :q, '%')))
             """)
     Page<Ticket> search(@Param("projectId") Long projectId,
+                        @Param("archived") boolean archived,
                         @Param("status") String status,
                         @Param("assigneeId") Long assigneeId,
                         @Param("q") String q,
                         Pageable pageable);
-
-    /** The archived tab: same filters, opposite side of the archive flag. */
-    @Query("""
-            select t from Ticket t
-            where t.project.id = :projectId
-              and t.archivedAt is not null
-              and (:assigneeId is null or t.assignee.id = :assigneeId)
-              and (:q is null or lower(t.title) like lower(concat('%', :q, '%'))
-                              or lower(t.ticketKey) like lower(concat('%', :q, '%')))
-            """)
-    Page<Ticket> searchArchived(@Param("projectId") Long projectId,
-                                @Param("assigneeId") Long assigneeId,
-                                @Param("q") String q,
-                                Pageable pageable);
 }

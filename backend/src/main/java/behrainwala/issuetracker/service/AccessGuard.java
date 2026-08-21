@@ -88,11 +88,28 @@ public class AccessGuard {
         requireActive(project);
     }
 
+    /**
+     * Every ticket-content change goes through here, so archived state cannot be forgotten
+     * at an individual write path the way a separate follow-up check can be.
+     */
+    public void requireWrite(Ticket ticket, User user) {
+        requireWrite(ticket.getProject(), user);
+        requireActive(ticket);
+    }
+
     public void requireAdmin(Project project, User user) {
+        requireAdminister(project, user);
+        requireActive(project);
+    }
+
+    /**
+     * The permission half of {@link #requireAdmin} on its own: archiving, restoring and
+     * deleting a project have to work on an already-archived one.
+     */
+    public void requireAdminister(Project project, User user) {
         if (!canAdminister(project, user)) {
             throw new AccessDeniedException("Project lead or admin required on " + project.getProjectKey());
         }
-        requireActive(project);
     }
 
     public boolean isProjectLead(Project project, User user) {

@@ -60,11 +60,11 @@ public class TicketService {
                                 User current) {
         Project project = projectService.requireByKey(projectKey);
         accessGuard.requireView(project, current);
-        Page<Ticket> page = archived
-                ? ticketRepository.searchArchived(project.getId(), assigneeId, blankToNull(q), pageable)
-                : ticketRepository.search(project.getId(),
-                        status == null ? null : status.name(), assigneeId, blankToNull(q), pageable);
-        return page.map(TicketDto::from);
+        // The archived tab has no status columns to filter by, so it never narrows on status.
+        String statusName = archived || status == null ? null : status.name();
+        return ticketRepository
+                .search(project.getId(), archived, statusName, assigneeId, blankToNull(q), pageable)
+                .map(TicketDto::from);
     }
 
     /**
@@ -116,11 +116,6 @@ public class TicketService {
         }
         ticket.restore();
         return TicketDto.from(ticket);
-    }
-
-    /** Archived tickets are frozen: restore before editing or moving them. */
-    private void requireNotArchived(Ticket ticket) {
-        accessGuard.requireActive(ticket);
     }
 
     /**
@@ -251,12 +246,11 @@ public class TicketService {
     @Transactional
     public List<TicketDto> addChildren(String epicKey, List<String> ticketKeys, User current) {
         Ticket epic = requireEpic(epicKey);
-        accessGuard.requireWrite(epic.getProject(), current);
+        accessGuard.requireWrite(epic, current);
 
-        requireNotArchived(epic);
         for (String key : ticketKeys) {
             Ticket ticket = requireByKey(key);
-            requireNotArchived(ticket);
+            accessGuard.requireActive(ticket);
             // resolveEpic re-checks same-project, not-an-epic and no-self-parent for each one.
             ticket.setEpic(resolveEpic(epic.getTicketKey(), ticket));
         }
@@ -268,9 +262,10 @@ public class TicketService {
     @Transactional
     public List<TicketDto> removeChild(String epicKey, String ticketKey, User current) {
         Ticket epic = requireEpic(epicKey);
-        accessGuard.requireWrite(epic.getProject(), current);
+        accessGuard.requireWrite(epic, current);
 
         Ticket ticket = requireByKey(ticketKey);
+        accessGuard.requireActive(ticket);
         if (ticket.getEpic() == null || !ticket.getEpic().getId().equals(epic.getId())) {
             throw new ConflictException(ticket.getTicketKey() + " is not in " + epic.getTicketKey());
         }
@@ -282,8 +277,7 @@ public class TicketService {
     @Transactional
     public TicketDto update(String ticketKey, UpdateTicketRequest request, User current) {
         Ticket ticket = requireByKey(ticketKey);
-        accessGuard.requireWrite(ticket.getProject(), current);
-        requireNotArchived(ticket);
+        accessGuard.requireWrite(ticket, current);
 
         if (request.title() != null) {
             ticket.setTitle(request.title());
@@ -326,8 +320,7 @@ public class TicketService {
     @Transactional
     public TicketDto transition(String ticketKey, TicketStatus status, User current) {
         Ticket ticket = requireByKey(ticketKey);
-        accessGuard.requireWrite(ticket.getProject(), current);
-        requireNotArchived(ticket);
+        accessGuard.requireWrite(ticket, current);
         recordMove(ticket, status, current);
         return TicketDto.from(ticket);
     }

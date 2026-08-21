@@ -5,7 +5,7 @@ import type { Project, Ticket, TicketStatus, User } from '../api/types'
 import { STATUS_LABELS, TICKET_STATUSES } from '../api/types'
 import Avatar from '../components/Avatar'
 import CreateTicketModal from '../components/CreateTicketModal'
-import { formatMovedAt } from '../components/StatusHistory'
+import { formatDateTime } from '../format'
 import { PriorityBadge, TypeBadge } from '../components/Badges'
 
 type View = 'board' | 'list' | 'archived'
@@ -121,7 +121,7 @@ export default function ProjectBoardPage() {
       {project.archived && (
         <p className="notice">
           This project is archived and read-only
-          {project.archivedAt ? ` since ${formatMovedAt(project.archivedAt)}` : ''}
+          {project.archivedAt ? ` since ${formatDateTime(project.archivedAt)}` : ''}
           {project.archivedBy ? `, by ${project.archivedBy.displayName}` : ''}. Restore it from{' '}
           <Link to={`/projects/${project.projectKey}/settings`}>Settings</Link> to make changes.
         </p>
@@ -295,7 +295,7 @@ function ArchivedTable({
               <td>
                 <Link to={`/tickets/${ticket.ticketKey}`}>{ticket.title}</Link>
               </td>
-              <td className="muted">{ticket.archivedAt ? formatMovedAt(ticket.archivedAt) : '—'}</td>
+              <td className="muted">{ticket.archivedAt ? formatDateTime(ticket.archivedAt) : '—'}</td>
               <td className="cell-user">
                 <Avatar user={ticket.archivedBy} size={22} />
                 {ticket.archivedBy?.displayName ?? 'Unknown'}

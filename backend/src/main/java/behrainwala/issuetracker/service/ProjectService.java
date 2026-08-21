@@ -14,7 +14,6 @@ import behrainwala.issuetracker.repo.ProjectRepository;
 import behrainwala.issuetracker.repo.TicketRepository;
 import behrainwala.issuetracker.web.ConflictException;
 import behrainwala.issuetracker.web.NotFoundException;
-import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -43,20 +42,15 @@ public class ProjectService {
     }
 
     public List<ProjectDto> listVisible(User current, boolean archived) {
-        boolean admin = accessGuard.isAdmin(current);
-        List<Project> projects;
-        if (archived) {
-            projects = admin
-                    ? projectRepository.findArchivedWithMembers()
-                    : projectRepository.findArchivedForUser(current.getId());
-        } else {
-            projects = admin
-                    ? projectRepository.findAllWithMembers()
-                    : projectRepository.findAllForUser(current.getId());
-        }
-        return projects.stream()
-                .map(p -> ProjectDto.from(p, ticketRepository.countByProjectIdAndArchivedAtIsNull(p.getId())))
-                .toList();
+        List<Project> projects = accessGuard.isAdmin(current)
+                ? projectRepository.findAllWithMembers(archived)
+                : projectRepository.findForUser(current.getId(), archived);
+        return projects.stream().map(this::toDto).toList();
+    }
+
+    /** A project card always shows its live ticket count, never the archived ones. */
+    private ProjectDto toDto(Project project) {
+        return ProjectDto.from(project, ticketRepository.countByProjectIdAndArchivedAtIsNull(project.getId()));
     }
 
     /**
@@ -66,33 +60,23 @@ public class ProjectService {
     @Transactional
     public ProjectDto archive(String projectKey, User current) {
         Project project = requireByKey(projectKey);
-        requireLeadOrAdmin(project, current);
+        accessGuard.requireAdminister(project, current);
         if (project.isArchived()) {
             throw new ConflictException(project.getProjectKey() + " is already archived");
         }
         project.archive(current);
-        return ProjectDto.from(project, ticketRepository.countByProjectIdAndArchivedAtIsNull(project.getId()));
+        return toDto(project);
     }
 
     @Transactional
     public ProjectDto restore(String projectKey, User current) {
         Project project = requireByKey(projectKey);
-        requireLeadOrAdmin(project, current);
+        accessGuard.requireAdminister(project, current);
         if (!project.isArchived()) {
             throw new ConflictException(project.getProjectKey() + " is not archived");
         }
         project.restore();
-        return ProjectDto.from(project, ticketRepository.countByProjectIdAndArchivedAtIsNull(project.getId()));
-    }
-
-    /**
-     * Permission check without the "project must be active" rule that requireAdmin adds -
-     * archiving, restoring and deleting have to work on an archived project.
-     */
-    private void requireLeadOrAdmin(Project project, User current) {
-        if (!accessGuard.canAdminister(project, current)) {
-            throw new AccessDeniedException("Project lead or admin required on " + project.getProjectKey());
-        }
+        return toDto(project);
     }
 
     public Project requireByKey(String projectKey) {
@@ -103,7 +87,7 @@ public class ProjectService {
     public ProjectDto get(String projectKey, User current) {
         Project project = requireByKey(projectKey);
         accessGuard.requireView(project, current);
-        return ProjectDto.from(project, ticketRepository.countByProjectIdAndArchivedAtIsNull(project.getId()));
+        return toDto(project);
     }
 
     @Transactional
@@ -138,14 +122,14 @@ public class ProjectService {
         accessGuard.requireAdmin(project, current);
         project.setName(request.name());
         project.setDescription(request.description());
-        return ProjectDto.from(project, ticketRepository.countByProjectIdAndArchivedAtIsNull(project.getId()));
+        return toDto(project);
     }
 
     @Transactional
     public void delete(String projectKey, User current) {
         Project project = requireByKey(projectKey);
         // Deliberately not requireAdmin: an archived project must still be deletable.
-        requireLeadOrAdmin(project, current);
+        accessGuard.requireAdminister(project, current);
         projectRepository.delete(project);
     }
 

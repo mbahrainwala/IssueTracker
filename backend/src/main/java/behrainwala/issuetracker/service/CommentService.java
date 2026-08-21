@@ -40,8 +40,7 @@ public class CommentService {
     @Transactional
     public CommentDto add(String ticketKey, CommentRequest request, User current) {
         Ticket ticket = ticketService.requireByKey(ticketKey);
-        accessGuard.requireWrite(ticket.getProject(), current);
-        accessGuard.requireActive(ticket);
+        accessGuard.requireWrite(ticket, current);
         Comment comment = new Comment(ticket, current, request.body());
         return CommentDto.from(commentRepository.save(comment));
     }

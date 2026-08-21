@@ -68,8 +68,7 @@ public class TicketLinkService {
     @Transactional
     public List<TicketLinkDto> create(String ticketKey, CreateLinkRequest request, User current) {
         Ticket source = ticketService.requireByKey(ticketKey);
-        accessGuard.requireWrite(source.getProject(), current);
-        accessGuard.requireActive(source);
+        accessGuard.requireWrite(source, current);
 
         Ticket target = ticketService.requireByKey(request.targetTicketKey());
         // Seeing the other ticket is required; editing it is not.

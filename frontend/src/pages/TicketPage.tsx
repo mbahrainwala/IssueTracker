@@ -6,13 +6,10 @@ import { STATUS_LABELS, TICKET_PRIORITIES, TICKET_STATUSES, TICKET_TYPES } from 
 import Avatar from '../components/Avatar'
 import { PriorityBadge, TypeBadge } from '../components/Badges'
 import EpicChildren from '../components/EpicChildren'
-import StatusHistory, { formatMovedAt } from '../components/StatusHistory'
+import StatusHistory from '../components/StatusHistory'
 import TicketLinks from '../components/TicketLinks'
 import { useAuth } from '../auth/AuthContext'
-
-function formatDate(iso: string): string {
-  return new Date(iso).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })
-}
+import { formatDateTime } from '../format'
 
 export default function TicketPage() {
   const { ticketKey = '' } = useParams()
@@ -28,6 +25,8 @@ export default function TicketPage() {
   const [epics, setEpics] = useState<EpicRef[]>([])
   /** Bumped after an edit so the epic's child list refetches. */
   const [childrenToken, setChildrenToken] = useState(0)
+  /** Only a status change adds a history row, so only that refetches the trail. */
+  const [historyToken, setHistoryToken] = useState(0)
   const [editingBody, setEditingBody] = useState(false)
   const [draftTitle, setDraftTitle] = useState('')
   const [draftDescription, setDraftDescription] = useState('')
@@ -62,8 +61,13 @@ export default function TicketPage() {
 
   async function patch(body: Parameters<typeof api.updateTicket>[1]) {
     try {
-      setTicket(await api.updateTicket(ticketKey, body))
+      const previousStatus = ticket?.status
+      const updated = await api.updateTicket(ticketKey, body)
+      setTicket(updated)
       setChildrenToken((n) => n + 1)
+      if (updated.status !== previousStatus) {
+        setHistoryToken((n) => n + 1)
+      }
       setError(null)
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Update failed')
@@ -174,7 +178,7 @@ export default function TicketPage() {
 
           {ticket.archived && (
             <p className="notice archived-banner">
-              Archived{ticket.archivedAt ? ` on ${formatMovedAt(ticket.archivedAt)}` : ''}
+              Archived{ticket.archivedAt ? ` on ${formatDateTime(ticket.archivedAt)}` : ''}
               {ticket.archivedBy ? ` by ${ticket.archivedBy.displayName}` : ''}. It is read-only
               and hidden from the board — restore it to make changes.
             </p>
@@ -227,7 +231,7 @@ export default function TicketPage() {
             />
           )}
 
-          <StatusHistory ticketKey={ticket.ticketKey} refreshToken={childrenToken} />
+          <StatusHistory ticketKey={ticket.ticketKey} refreshToken={historyToken} />
 
           <TicketLinks ticketKey={ticket.ticketKey} />
 
@@ -239,7 +243,7 @@ export default function TicketPage() {
                 <div className="comment-body">
                   <div className="comment-head">
                     <strong>{comment.author.displayName}</strong>
-                    <span className="muted">{formatDate(comment.createdAt)}</span>
+                    <span className="muted">{formatDateTime(comment.createdAt)}</span>
                     {(user?.id === comment.author.id || user?.role === 'ADMIN') && (
                       <button className="link-button" onClick={() => removeComment(comment.id)}>
                         Delete
@@ -370,9 +374,9 @@ export default function TicketPage() {
               <Avatar user={ticket.reporter} size={22} /> {ticket.reporter.displayName}
             </dd>
             <dt>Created</dt>
-            <dd>{formatDate(ticket.createdAt)}</dd>
+            <dd>{formatDateTime(ticket.createdAt)}</dd>
             <dt>Updated</dt>
-            <dd>{formatDate(ticket.updatedAt)}</dd>
+            <dd>{formatDateTime(ticket.updatedAt)}</dd>
           </dl>
         </aside>
       </div>

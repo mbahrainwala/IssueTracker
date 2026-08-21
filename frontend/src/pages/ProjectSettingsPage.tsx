@@ -4,7 +4,7 @@ import { ApiError, api } from '../api/client'
 import type { Member, Project, ProjectRole, User } from '../api/types'
 import { PROJECT_ROLES } from '../api/types'
 import Avatar from '../components/Avatar'
-import { formatMovedAt } from '../components/StatusHistory'
+import { formatDateTime } from '../format'
 
 export default function ProjectSettingsPage() {
   const { projectKey = '' } = useParams()
@@ -229,7 +229,7 @@ export default function ProjectSettingsPage() {
         {project.archived ? (
           <>
             <p className="muted">
-              Archived{project.archivedAt ? ` on ${formatMovedAt(project.archivedAt)}` : ''}
+              Archived{project.archivedAt ? ` on ${formatDateTime(project.archivedAt)}` : ''}
               {project.archivedBy ? ` by ${project.archivedBy.displayName}` : ''}. It is hidden
               from the active project list and read-only until restored. Nothing has been lost.
             </p>
