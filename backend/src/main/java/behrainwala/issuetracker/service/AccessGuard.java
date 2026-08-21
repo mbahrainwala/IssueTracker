@@ -121,6 +121,17 @@ public class AccessGuard {
      * or document. Callers supply the message because "the author" and "the uploader" are
      * different words for the same rule.
      */
+    /**
+     * Reserved for a global administrator, whatever project role the caller holds. Used for
+     * the irreversible actions - deleting a ticket destroys its comments, attachments, links
+     * and status history with it, and archiving already covers "get it out of my way".
+     */
+    public void requireGlobalAdmin(User user, String message) {
+        if (!isAdmin(user)) {
+            throw new AccessDeniedException(message);
+        }
+    }
+
     public void requireOwnerOrAdmin(User owner, User current, String message) {
         if (!owner.getId().equals(current.getId()) && !isAdmin(current)) {
             throw new AccessDeniedException(message);

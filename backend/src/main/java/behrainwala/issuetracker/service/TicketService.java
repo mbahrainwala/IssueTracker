@@ -350,7 +350,10 @@ public class TicketService {
     @Transactional
     public void delete(String ticketKey, User current) {
         Ticket ticket = requireByKey(ticketKey);
-        accessGuard.requireAdmin(ticket.getProject(), current);
+        // Administrators only: not a project lead, who can archive instead. Deleting takes
+        // the ticket's comments, attachments, links and history with it and cannot be undone.
+        accessGuard.requireGlobalAdmin(current, "Only an administrator can delete a ticket");
+        accessGuard.requireActive(ticket.getProject());
         ticketRepository.delete(ticket);
     }
 

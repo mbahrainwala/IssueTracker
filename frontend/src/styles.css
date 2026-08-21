@@ -508,6 +508,32 @@ label input, label select, label textarea { font-weight: 400; color: var(--text)
 /* Links inside user-written text: wrap long URLs rather than stretching the column. */
 .ticket-description a, .comment-body a { overflow-wrap: anywhere; }
 
+/* ---------- inline formatting ---------- */
+/* The wrapper is what the surrounding layout now sees, so it has to fill the space the bare
+   textarea used to - .comment-form aligns its children to the right, and an unstretched
+   wrapper collapses to the width of the toolbar. */
+.formatted-input { display: flex; flex-direction: column; gap: 4px; width: 100%; align-self: stretch; }
+.formatted-input textarea { width: 100%; box-sizing: border-box; }
+.format-toolbar { display: flex; gap: 4px; }
+.format-button {
+  min-width: 28px;
+  padding: 2px 6px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.6;
+  cursor: pointer;
+}
+.format-button:hover { border-color: var(--primary); color: var(--primary); }
+.fmt-bold { font-weight: 700; }
+.fmt-italic { font-style: italic; font-family: Georgia, serif; }
+.fmt-underline { text-decoration: underline; }
+
+/* An underline next to a link needs to stay distinguishable from one. */
+.ticket-description u, .comment-body u, .page-header u { text-underline-offset: 2px; }
+
 /* ---------- ticket links ---------- */
 .links {
   border-top: 1px solid var(--border);

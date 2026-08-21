@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { ApiError, api } from '../api/client'
 import type { EpicRef, Ticket, TicketStatus, User } from '../api/types'
 import { STATUS_LABELS, TICKET_PRIORITIES, TICKET_STATUSES, TICKET_TYPES } from '../api/types'
+import FormattedTextarea from './FormattedTextarea'
 import Modal from './Modal'
 
 /**
@@ -95,10 +96,10 @@ export default function CreateTicketModal({
         </label>
         <label>
           Description
-          <textarea
+          <FormattedTextarea
             rows={4}
             value={form.description}
-            onChange={(e) => setForm({ ...form, description: e.target.value })}
+            onChange={(description) => setForm({ ...form, description })}
           />
         </label>
         <div className="form-row">

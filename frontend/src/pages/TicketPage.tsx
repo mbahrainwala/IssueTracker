@@ -7,6 +7,7 @@ import Attachments from '../components/Attachments'
 import Avatar from '../components/Avatar'
 import { PriorityBadge, TypeBadge } from '../components/Badges'
 import EpicChildren from '../components/EpicChildren'
+import FormattedTextarea from '../components/FormattedTextarea'
 import RichText from '../components/RichText'
 import StatusHistory from '../components/StatusHistory'
 import TicketLinks from '../components/TicketLinks'
@@ -173,9 +174,12 @@ export default function TicketPage() {
                 Archive
               </button>
             )}
-            <button className="btn btn-ghost btn-danger" onClick={deleteTicket}>
-              Delete
-            </button>
+            {/* Deleting is an administrator's call; everyone else archives. */}
+            {user?.role === 'ADMIN' && (
+              <button className="btn btn-ghost btn-danger" onClick={deleteTicket}>
+                Delete
+              </button>
+            )}
           </div>
 
           {ticket.archived && (
@@ -194,7 +198,7 @@ export default function TicketPage() {
               </label>
               <label>
                 Description
-                <textarea rows={8} value={draftDescription} onChange={(e) => setDraftDescription(e.target.value)} />
+                <FormattedTextarea rows={8} value={draftDescription} onChange={setDraftDescription} />
               </label>
               <div className="form-actions">
                 <button
@@ -272,11 +276,11 @@ export default function TicketPage() {
               <p className="muted">Restore this ticket to comment on it.</p>
             ) : (
               <form className="comment-form" onSubmit={postComment}>
-                <textarea
+                <FormattedTextarea
                   rows={3}
                   placeholder="Leave a comment…"
                   value={newComment}
-                  onChange={(e) => setNewComment(e.target.value)}
+                  onChange={setNewComment}
                 />
                 <button className="btn btn-primary" disabled={!newComment.trim()}>
                   Comment

@@ -4,6 +4,7 @@ import { ApiError, api } from '../api/client'
 import type { Member, Project, ProjectRole, User } from '../api/types'
 import { PROJECT_ROLES } from '../api/types'
 import Avatar from '../components/Avatar'
+import FormattedTextarea from '../components/FormattedTextarea'
 import { formatDateTime } from '../format'
 
 export default function ProjectSettingsPage() {
@@ -163,7 +164,7 @@ export default function ProjectSettingsPage() {
           </label>
           <label>
             Description
-            <textarea rows={3} value={description} onChange={(e) => setDescription(e.target.value)} />
+            <FormattedTextarea rows={3} value={description} onChange={setDescription} />
           </label>
           <div className="form-actions">
             <button className="btn btn-primary">Save changes</button>
