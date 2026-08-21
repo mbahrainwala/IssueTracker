@@ -10,6 +10,7 @@ import type {
   ProjectAssignment,
   ProjectRole,
   Role,
+  StatusChange,
   Ticket,
   TicketLink,
   TicketPriority,
@@ -219,6 +220,9 @@ export const api = {
     request<Ticket>(`/tickets/${ticketKey}/status${query({ status })}`, { method: 'PATCH' }),
 
   deleteTicket: (ticketKey: string) => request<void>(`/tickets/${ticketKey}`, { method: 'DELETE' }),
+
+  /** Who moved this ticket between buckets, oldest first. */
+  listStatusHistory: (ticketKey: string) => request<StatusChange[]>(`/tickets/${ticketKey}/history`),
 
   listComments: (ticketKey: string) => request<Comment[]>(`/tickets/${ticketKey}/comments`),
 

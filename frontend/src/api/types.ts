@@ -117,6 +117,17 @@ export interface ProjectAssignment {
   projectRole: ProjectRole
 }
 
+/** One recorded move of a ticket between status buckets. */
+export interface StatusChange {
+  id: number
+  fromStatus: TicketStatus
+  toStatus: TicketStatus
+  movedBy: User
+  movedAt: string
+  /** Server-rendered sentence, e.g. "moved from Backlog to To Do by Alice Nguyen". */
+  summary: string
+}
+
 export interface EpicRef {
   id: number
   ticketKey: string

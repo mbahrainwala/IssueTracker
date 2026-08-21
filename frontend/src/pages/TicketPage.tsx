@@ -6,6 +6,7 @@ import { STATUS_LABELS, TICKET_PRIORITIES, TICKET_STATUSES, TICKET_TYPES } from 
 import Avatar from '../components/Avatar'
 import { PriorityBadge, TypeBadge } from '../components/Badges'
 import EpicChildren from '../components/EpicChildren'
+import StatusHistory from '../components/StatusHistory'
 import TicketLinks from '../components/TicketLinks'
 import { useAuth } from '../auth/AuthContext'
 
@@ -178,6 +179,8 @@ export default function TicketPage() {
               refreshToken={childrenToken}
             />
           )}
+
+          <StatusHistory ticketKey={ticket.ticketKey} refreshToken={childrenToken} />
 
           <TicketLinks ticketKey={ticket.ticketKey} />
 

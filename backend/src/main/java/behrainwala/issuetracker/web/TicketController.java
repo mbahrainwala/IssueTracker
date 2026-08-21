@@ -6,6 +6,7 @@ import behrainwala.issuetracker.dto.TicketDtos.CreateTicketRequest;
 import behrainwala.issuetracker.dto.TicketDtos.EpicRefDto;
 import behrainwala.issuetracker.dto.TicketDtos.TicketDto;
 import behrainwala.issuetracker.dto.TicketDtos.UpdateTicketRequest;
+import behrainwala.issuetracker.dto.TicketHistoryDtos.StatusChangeDto;
 import behrainwala.issuetracker.dto.TicketLinkDtos.CreateLinkRequest;
 import behrainwala.issuetracker.dto.TicketLinkDtos.LinkedTicketDto;
 import behrainwala.issuetracker.dto.TicketLinkDtos.TicketLinkDto;
@@ -101,6 +102,12 @@ public class TicketController {
                                        @PathVariable String childKey,
                                        Authentication auth) {
         return ticketService.removeChild(ticketKey, childKey, userService.currentUser(auth));
+    }
+
+    /** Who moved this ticket between buckets, and when. */
+    @GetMapping("/tickets/{ticketKey}/history")
+    public List<StatusChangeDto> history(@PathVariable String ticketKey, Authentication auth) {
+        return ticketService.history(ticketKey, userService.currentUser(auth));
     }
 
     /** Cross-project ticket lookup for the link picker. */

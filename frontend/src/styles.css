@@ -431,6 +431,31 @@ label input, label select, label textarea { font-weight: 400; color: var(--text)
 }
 .epic-progress > div { height: 100%; background: #36b37e; transition: width 0.2s ease; }
 
+/* ---------- status history ---------- */
+.history {
+  border-top: 1px solid var(--border);
+  padding-top: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.history-list { display: flex; flex-direction: column; gap: 6px; }
+.history-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface-2);
+  font-size: 13px;
+  flex-wrap: wrap;
+}
+.history-row-latest { border-color: color-mix(in srgb, var(--primary) 45%, var(--border)); }
+.history-text { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.history-arrow { color: var(--muted); }
+.history-row time { font-size: 12px; white-space: nowrap; }
+
 /* ---------- ticket links ---------- */
 .links {
   border-top: 1px solid var(--border);

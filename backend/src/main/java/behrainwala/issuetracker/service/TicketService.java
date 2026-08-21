@@ -5,14 +5,17 @@ import behrainwala.issuetracker.domain.Ticket;
 import behrainwala.issuetracker.domain.TicketPriority;
 import behrainwala.issuetracker.domain.TicketStatus;
 import behrainwala.issuetracker.domain.TicketType;
+import behrainwala.issuetracker.domain.TicketStatusChange;
 import behrainwala.issuetracker.domain.User;
 import behrainwala.issuetracker.dto.TicketDtos.CreateTicketRequest;
 import behrainwala.issuetracker.dto.TicketDtos.EpicRefDto;
 import behrainwala.issuetracker.dto.TicketDtos.TicketDto;
 import behrainwala.issuetracker.dto.TicketDtos.UpdateTicketRequest;
+import behrainwala.issuetracker.dto.TicketHistoryDtos.StatusChangeDto;
 import behrainwala.issuetracker.dto.TicketLinkDtos.LinkedTicketDto;
 import behrainwala.issuetracker.repo.ProjectRepository;
 import behrainwala.issuetracker.repo.TicketRepository;
+import behrainwala.issuetracker.repo.TicketStatusChangeRepository;
 import behrainwala.issuetracker.web.ConflictException;
 import behrainwala.issuetracker.web.NotFoundException;
 import org.springframework.data.domain.Page;
@@ -29,17 +32,20 @@ public class TicketService {
 
     private final TicketRepository ticketRepository;
     private final ProjectRepository projectRepository;
+    private final TicketStatusChangeRepository statusChangeRepository;
     private final ProjectService projectService;
     private final UserService userService;
     private final AccessGuard accessGuard;
 
     public TicketService(TicketRepository ticketRepository,
                          ProjectRepository projectRepository,
+                         TicketStatusChangeRepository statusChangeRepository,
                          ProjectService projectService,
                          UserService userService,
                          AccessGuard accessGuard) {
         this.ticketRepository = ticketRepository;
         this.projectRepository = projectRepository;
+        this.statusChangeRepository = statusChangeRepository;
         this.projectService = projectService;
         this.userService = userService;
         this.accessGuard = accessGuard;
@@ -226,7 +232,7 @@ public class TicketService {
             ticket.setType(request.type());
         }
         if (request.status() != null) {
-            ticket.setStatus(request.status());
+            recordMove(ticket, request.status(), current);
         }
         if (request.priority() != null) {
             ticket.setPriority(request.priority());
@@ -254,8 +260,30 @@ public class TicketService {
     public TicketDto transition(String ticketKey, TicketStatus status, User current) {
         Ticket ticket = requireByKey(ticketKey);
         accessGuard.requireWrite(ticket.getProject(), current);
-        ticket.setStatus(status);
+        recordMove(ticket, status, current);
         return TicketDto.from(ticket);
+    }
+
+    /**
+     * Moves the ticket and logs who did it. A "move" to the status it already has is not a
+     * move, so it leaves no entry - otherwise re-saving a form would pollute the history.
+     */
+    private void recordMove(Ticket ticket, TicketStatus target, User current) {
+        TicketStatus previous = ticket.getStatus();
+        if (previous == target) {
+            return;
+        }
+        ticket.setStatus(target);
+        statusChangeRepository.save(new TicketStatusChange(ticket, previous, target, current));
+    }
+
+    /** Every recorded move of this ticket, oldest first. */
+    public List<StatusChangeDto> history(String ticketKey, User current) {
+        Ticket ticket = requireByKey(ticketKey);
+        accessGuard.requireView(ticket.getProject(), current);
+        return statusChangeRepository.findByTicketIdOrderByIdAsc(ticket.getId()).stream()
+                .map(StatusChangeDto::from)
+                .toList();
     }
 
     @Transactional
