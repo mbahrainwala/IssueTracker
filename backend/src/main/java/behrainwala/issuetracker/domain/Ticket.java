@@ -12,6 +12,7 @@ import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 
+import java.time.Instant;
 import java.time.LocalDate;
 
 @Entity
@@ -66,6 +67,14 @@ public class Ticket extends Auditable {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "epic_id")
     private Ticket epic;
+
+    /** Non-null once archived; doubles as the flag and the "when". */
+    @Column(name = "archived_at")
+    private Instant archivedAt;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "archived_by_id")
+    private User archivedBy;
 
     @Column(name = "story_points")
     private Integer storyPoints;
@@ -150,6 +159,28 @@ public class Ticket extends Auditable {
 
     public void setAssignee(User assignee) {
         this.assignee = assignee;
+    }
+
+    public boolean isArchived() {
+        return archivedAt != null;
+    }
+
+    public void archive(User by) {
+        this.archivedAt = Instant.now();
+        this.archivedBy = by;
+    }
+
+    public void restore() {
+        this.archivedAt = null;
+        this.archivedBy = null;
+    }
+
+    public Instant getArchivedAt() {
+        return archivedAt;
+    }
+
+    public User getArchivedBy() {
+        return archivedBy;
     }
 
     public Ticket getEpic() {

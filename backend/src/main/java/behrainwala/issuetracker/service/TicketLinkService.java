@@ -69,10 +69,13 @@ public class TicketLinkService {
     public List<TicketLinkDto> create(String ticketKey, CreateLinkRequest request, User current) {
         Ticket source = ticketService.requireByKey(ticketKey);
         accessGuard.requireWrite(source.getProject(), current);
+        accessGuard.requireActive(source);
 
         Ticket target = ticketService.requireByKey(request.targetTicketKey());
         // Seeing the other ticket is required; editing it is not.
         accessGuard.requireView(target.getProject(), current);
+        // ...but a link would appear on the target too, so an archived one stays untouched.
+        accessGuard.requireActive(target);
 
         if (source.getId().equals(target.getId())) {
             throw new ConflictException("A ticket cannot be linked to itself");
@@ -106,6 +109,10 @@ public class TicketLinkService {
         if (!canEditEitherEnd) {
             throw new AccessDeniedException("Write access required on one of the linked projects");
         }
+        // canWrite is a plain permission check and skips the archive rule, so state it here:
+        // removing the link would change what either end shows.
+        accessGuard.requireActive(link.getSource());
+        accessGuard.requireActive(link.getTarget());
         linkRepository.delete(link);
     }
 }

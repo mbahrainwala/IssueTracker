@@ -4,8 +4,10 @@ import behrainwala.issuetracker.domain.Project;
 import behrainwala.issuetracker.domain.ProjectMember;
 import behrainwala.issuetracker.domain.ProjectRole;
 import behrainwala.issuetracker.domain.Role;
+import behrainwala.issuetracker.domain.Ticket;
 import behrainwala.issuetracker.domain.User;
 import behrainwala.issuetracker.repo.ProjectMemberRepository;
+import behrainwala.issuetracker.web.ConflictException;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Component;
 
@@ -54,16 +56,43 @@ public class AccessGuard {
         }
     }
 
+    /**
+     * An archived project is frozen. Enforcing it here means every write path already goes
+     * through the check; archiving, restoring and deleting a project deliberately use
+     * {@link #canAdminister} directly so they still work on an archived one.
+     */
+    public void requireActive(Project project) {
+        if (project.isArchived()) {
+            throw new ConflictException(
+                    "Project %s is archived - restore it before making changes"
+                            .formatted(project.getProjectKey()));
+        }
+    }
+
+    /**
+     * Read-only means read-only: an archived ticket, or any ticket in an archived project,
+     * refuses every content change - comments and links included, not just its own fields.
+     */
+    public void requireActive(Ticket ticket) {
+        requireActive(ticket.getProject());
+        if (ticket.isArchived()) {
+            throw new ConflictException(
+                    ticket.getTicketKey() + " is archived - restore it before making changes");
+        }
+    }
+
     public void requireWrite(Project project, User user) {
         if (!canWrite(project, user)) {
             throw new AccessDeniedException("Write access required on project " + project.getProjectKey());
         }
+        requireActive(project);
     }
 
     public void requireAdmin(Project project, User user) {
         if (!canAdminister(project, user)) {
             throw new AccessDeniedException("Project lead or admin required on " + project.getProjectKey());
         }
+        requireActive(project);
     }
 
     public boolean isProjectLead(Project project, User user) {

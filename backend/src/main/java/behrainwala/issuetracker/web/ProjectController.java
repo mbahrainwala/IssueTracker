@@ -18,6 +18,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
@@ -34,9 +35,21 @@ public class ProjectController {
         this.userService = userService;
     }
 
+    /** Active projects by default; pass archived=true for the archived tab. */
     @GetMapping
-    public List<ProjectDto> list(Authentication auth) {
-        return projectService.listVisible(userService.currentUser(auth));
+    public List<ProjectDto> list(@RequestParam(defaultValue = "false") boolean archived,
+                                 Authentication auth) {
+        return projectService.listVisible(userService.currentUser(auth), archived);
+    }
+
+    @PostMapping("/{projectKey}/archive")
+    public ProjectDto archive(@PathVariable String projectKey, Authentication auth) {
+        return projectService.archive(projectKey, userService.currentUser(auth));
+    }
+
+    @PostMapping("/{projectKey}/restore")
+    public ProjectDto restore(@PathVariable String projectKey, Authentication auth) {
+        return projectService.restore(projectKey, userService.currentUser(auth));
     }
 
     @GetMapping("/{projectKey}")

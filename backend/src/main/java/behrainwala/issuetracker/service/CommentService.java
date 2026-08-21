@@ -41,6 +41,7 @@ public class CommentService {
     public CommentDto add(String ticketKey, CommentRequest request, User current) {
         Ticket ticket = ticketService.requireByKey(ticketKey);
         accessGuard.requireWrite(ticket.getProject(), current);
+        accessGuard.requireActive(ticket);
         Comment comment = new Comment(ticket, current, request.body());
         return CommentDto.from(commentRepository.save(comment));
     }
@@ -70,5 +71,7 @@ public class CommentService {
         if (!isAuthor && !accessGuard.canAdminister(comment.getTicket().getProject(), current)) {
             throw new AccessDeniedException("Only the author or a project lead can modify this comment");
         }
+        // The author shortcut skips requireWrite, so the archive check has to be explicit.
+        accessGuard.requireActive(comment.getTicket());
     }
 }

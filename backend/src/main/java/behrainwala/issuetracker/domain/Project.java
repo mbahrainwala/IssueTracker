@@ -7,9 +7,12 @@ import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
 import jakarta.persistence.OneToMany;
 import jakarta.persistence.Table;
 
+import java.time.Instant;
 import java.util.Comparator;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -32,6 +35,14 @@ public class Project extends Auditable {
 
     @Column(length = 4000)
     private String description;
+
+    /** Non-null once archived; doubles as the flag and the "when". */
+    @Column(name = "archived_at")
+    private Instant archivedAt;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "archived_by_id")
+    private User archivedBy;
 
     /** Last issued ticket number for this project; incremented under a row lock. */
     @Column(name = "ticket_seq", nullable = false)
@@ -87,6 +98,28 @@ public class Project extends Auditable {
 
     public void setDescription(String description) {
         this.description = description;
+    }
+
+    public boolean isArchived() {
+        return archivedAt != null;
+    }
+
+    public void archive(User by) {
+        this.archivedAt = Instant.now();
+        this.archivedBy = by;
+    }
+
+    public void restore() {
+        this.archivedAt = null;
+        this.archivedBy = null;
+    }
+
+    public Instant getArchivedAt() {
+        return archivedAt;
+    }
+
+    public User getArchivedBy() {
+        return archivedBy;
     }
 
     public long getTicketSeq() {

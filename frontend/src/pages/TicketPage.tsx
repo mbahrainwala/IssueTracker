@@ -6,7 +6,7 @@ import { STATUS_LABELS, TICKET_PRIORITIES, TICKET_STATUSES, TICKET_TYPES } from 
 import Avatar from '../components/Avatar'
 import { PriorityBadge, TypeBadge } from '../components/Badges'
 import EpicChildren from '../components/EpicChildren'
-import StatusHistory from '../components/StatusHistory'
+import StatusHistory, { formatMovedAt } from '../components/StatusHistory'
 import TicketLinks from '../components/TicketLinks'
 import { useAuth } from '../auth/AuthContext'
 
@@ -96,6 +96,24 @@ export default function TicketPage() {
     }
   }
 
+  async function archive() {
+    try {
+      setTicket(await api.archiveTicket(ticketKey))
+      setError(null)
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not archive ticket')
+    }
+  }
+
+  async function restore() {
+    try {
+      setTicket(await api.restoreTicket(ticketKey))
+      setError(null)
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not restore ticket')
+    }
+  }
+
   async function deleteTicket() {
     if (!ticket) return
     if (!confirm(`Delete ${ticket.ticketKey}? This cannot be undone.`)) return
@@ -131,10 +149,36 @@ export default function TicketPage() {
               </Link>
             )}
             <span className="spacer" />
+            {ticket.archived ? (
+              <button className="btn btn-ghost" onClick={restore}>
+                Restore
+              </button>
+            ) : (
+              <button
+                className="btn btn-ghost"
+                onClick={archive}
+                disabled={ticket.status !== 'DONE'}
+                title={
+                  ticket.status === 'DONE'
+                    ? 'Archive this finished ticket'
+                    : 'Only tickets in Done can be archived'
+                }
+              >
+                Archive
+              </button>
+            )}
             <button className="btn btn-ghost btn-danger" onClick={deleteTicket}>
               Delete
             </button>
           </div>
+
+          {ticket.archived && (
+            <p className="notice archived-banner">
+              Archived{ticket.archivedAt ? ` on ${formatMovedAt(ticket.archivedAt)}` : ''}
+              {ticket.archivedBy ? ` by ${ticket.archivedBy.displayName}` : ''}. It is read-only
+              and hidden from the board — restore it to make changes.
+            </p>
+          )}
 
           {editingBody ? (
             <div className="form">
@@ -166,9 +210,11 @@ export default function TicketPage() {
             <>
               <h1 className="ticket-heading">{ticket.title}</h1>
               <p className="ticket-description">{ticket.description || <span className="muted">No description</span>}</p>
-              <button className="btn btn-ghost" onClick={() => setEditingBody(true)}>
-                Edit
-              </button>
+              {!ticket.archived && (
+                <button className="btn btn-ghost" onClick={() => setEditingBody(true)}>
+                  Edit
+                </button>
+              )}
             </>
           )}
 
@@ -176,6 +222,7 @@ export default function TicketPage() {
             <EpicChildren
               epicKey={ticket.ticketKey}
               projectKey={ticket.projectKey}
+              archived={ticket.archived}
               refreshToken={childrenToken}
             />
           )}
@@ -218,6 +265,8 @@ export default function TicketPage() {
         </div>
 
         <aside className="card ticket-side">
+          {/* The API freezes archived tickets, so the controls follow suit. */}
+          <fieldset className="side-fields" disabled={ticket.archived}>
           <label>
             Status
             <select
@@ -309,6 +358,7 @@ export default function TicketPage() {
               onChange={(e) => patch({ dueDate: e.target.value || null })}
             />
           </label>
+          </fieldset>
 
           <dl className="side-meta">
             <dt>Priority</dt>

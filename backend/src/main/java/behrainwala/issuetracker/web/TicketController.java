@@ -53,11 +53,24 @@ public class TicketController {
                                 @RequestParam(required = false) TicketStatus status,
                                 @RequestParam(required = false) Long assigneeId,
                                 @RequestParam(required = false) String q,
+                                @RequestParam(defaultValue = "false") boolean archived,
                                 @RequestParam(defaultValue = "0") int page,
                                 @RequestParam(defaultValue = "50") int size,
                                 Authentication auth) {
         var pageable = PageRequest.of(page, Math.min(size, 200), Sort.by(Sort.Direction.DESC, "ticketNumber"));
-        return ticketService.list(projectKey, status, assigneeId, q, pageable, userService.currentUser(auth));
+        return ticketService.list(projectKey, status, assigneeId, q, archived, pageable,
+                userService.currentUser(auth));
+    }
+
+    /** Takes finished work out of the active views. */
+    @PostMapping("/tickets/{ticketKey}/archive")
+    public TicketDto archive(@PathVariable String ticketKey, Authentication auth) {
+        return ticketService.archive(ticketKey, userService.currentUser(auth));
+    }
+
+    @PostMapping("/tickets/{ticketKey}/restore")
+    public TicketDto restore(@PathVariable String ticketKey, Authentication auth) {
+        return ticketService.restore(ticketKey, userService.currentUser(auth));
     }
 
     @PostMapping("/projects/{projectKey}/tickets")

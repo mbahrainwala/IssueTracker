@@ -32,7 +32,8 @@ public interface ProjectRepository extends JpaRepository<Project, Long> {
             select distinct p from Project p
             left join fetch p.members m
             left join fetch m.user
-            where exists (
+            where p.archivedAt is null
+              and exists (
                 select 1 from ProjectMember pm
                 where pm.project = p and pm.user.id = :userId
             )
@@ -40,12 +41,36 @@ public interface ProjectRepository extends JpaRepository<Project, Long> {
             """)
     List<Project> findAllForUser(@Param("userId") Long userId);
 
+    /** The archived tab, still scoped to what the user is assigned to. */
+    @Query("""
+            select distinct p from Project p
+            left join fetch p.members m
+            left join fetch m.user
+            where p.archivedAt is not null
+              and exists (
+                select 1 from ProjectMember pm
+                where pm.project = p and pm.user.id = :userId
+            )
+            order by p.projectKey
+            """)
+    List<Project> findArchivedForUser(@Param("userId") Long userId);
+
     /** Admin view: every project, members fetched for the same reason. */
     @Query("""
             select distinct p from Project p
             left join fetch p.members m
             left join fetch m.user
+            where p.archivedAt is null
             order by p.projectKey
             """)
     List<Project> findAllWithMembers();
+
+    @Query("""
+            select distinct p from Project p
+            left join fetch p.members m
+            left join fetch m.user
+            where p.archivedAt is not null
+            order by p.projectKey
+            """)
+    List<Project> findArchivedWithMembers();
 }

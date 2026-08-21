@@ -19,7 +19,14 @@ public interface TicketRepository extends JpaRepository<Ticket, Long> {
 
     long countByProjectId(Long projectId);
 
+    /** Project cards count live work, not the archive. */
+    long countByProjectIdAndArchivedAtIsNull(Long projectId);
+
+    /** All children, archived included - an epic's archive-readiness depends on seeing them. */
     List<Ticket> findByEpicIdOrderByTicketNumberDesc(Long epicId);
+
+    /** What still stands between an epic and being archivable. */
+    long countByEpicIdAndArchivedAtIsNull(Long epicId);
 
     /** Epics available as a parent, i.e. the EPIC-typed tickets of one project. */
     List<Ticket> findByProjectIdAndTypeOrderByTicketNumberDesc(Long projectId, TicketType type);
@@ -33,6 +40,7 @@ public interface TicketRepository extends JpaRepository<Ticket, Long> {
             select t from Ticket t
             where t.project.id = :projectId
               and t.type <> behrainwala.issuetracker.domain.TicketType.EPIC
+              and t.archivedAt is null
               and (t.epic is null or t.epic.id <> :epicId)
               and (:q is null or lower(t.ticketKey) like lower(concat('%', :q, '%'))
                               or lower(t.title) like lower(concat('%', :q, '%')))
@@ -54,11 +62,13 @@ public interface TicketRepository extends JpaRepository<Ticket, Long> {
 
     /**
      * Status is bound as a string rather than the enum so a null value needs no
-     * explicit type hint for Hibernate's parameter inference.
+     * explicit type hint for Hibernate's parameter inference. Archived tickets are a
+     * separate view, never mixed into the active one.
      */
     @Query("""
             select t from Ticket t
             where t.project.id = :projectId
+              and t.archivedAt is null
               and (:status is null or str(t.status) = :status)
               and (:assigneeId is null or t.assignee.id = :assigneeId)
               and (:q is null or lower(t.title) like lower(concat('%', :q, '%'))
@@ -69,4 +79,18 @@ public interface TicketRepository extends JpaRepository<Ticket, Long> {
                         @Param("assigneeId") Long assigneeId,
                         @Param("q") String q,
                         Pageable pageable);
+
+    /** The archived tab: same filters, opposite side of the archive flag. */
+    @Query("""
+            select t from Ticket t
+            where t.project.id = :projectId
+              and t.archivedAt is not null
+              and (:assigneeId is null or t.assignee.id = :assigneeId)
+              and (:q is null or lower(t.title) like lower(concat('%', :q, '%'))
+                              or lower(t.ticketKey) like lower(concat('%', :q, '%')))
+            """)
+    Page<Ticket> searchArchived(@Param("projectId") Long projectId,
+                                @Param("assigneeId") Long assigneeId,
+                                @Param("q") String q,
+                                Pageable pageable);
 }

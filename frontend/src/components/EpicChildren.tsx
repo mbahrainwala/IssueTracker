@@ -11,10 +11,13 @@ import CreateTicketModal from './CreateTicketModal'
 export default function EpicChildren({
   epicKey,
   projectKey,
+  archived,
   refreshToken,
 }: {
   epicKey: string
   projectKey: string
+  /** An archived epic is frozen; its list becomes read-only. */
+  archived: boolean
   refreshToken: number
 }) {
   const [children, setChildren] = useState<Ticket[]>([])
@@ -47,6 +50,8 @@ export default function EpicChildren({
 
   const done = children.filter((c) => c.status === 'DONE').length
   const points = children.reduce((sum, c) => sum + (c.storyPoints ?? 0), 0)
+  // What still stands between this epic and being archivable.
+  const live = children.filter((c) => !c.archived).length
 
   return (
     <section className="links">
@@ -58,14 +63,24 @@ export default function EpicChildren({
               {done}/{children.length} done{points > 0 ? ` · ${points} pts` : ''}
             </span>
           )}
-          <button className="btn btn-ghost" onClick={() => setAdding((v) => !v)}>
-            {adding ? 'Cancel' : 'Add existing'}
-          </button>
-          <button className="btn btn-ghost" onClick={() => setCreating(true)}>
-            New ticket
-          </button>
+          {!archived && (
+            <>
+              <button className="btn btn-ghost" onClick={() => setAdding((v) => !v)}>
+                {adding ? 'Cancel' : 'Add existing'}
+              </button>
+              <button className="btn btn-ghost" onClick={() => setCreating(true)}>
+                New ticket
+              </button>
+            </>
+          )}
         </div>
       </div>
+
+      {!archived && children.length > 0 && live > 0 && (
+        <p className="muted">
+          {live} of {children.length} not archived — this epic can be archived once they all are.
+        </p>
+      )}
 
       {adding && (
         <AddChildrenPanel
@@ -96,7 +111,7 @@ export default function EpicChildren({
           </div>
           <div className="link-group">
             {children.map((child) => (
-              <div key={child.id} className="link-row">
+              <div key={child.id} className={child.archived ? 'link-row row-disabled' : 'link-row'}>
                 <TypeBadge type={child.type} />
                 <Link to={`/tickets/${child.ticketKey}`} className="ticket-key">
                   {child.ticketKey}
@@ -108,13 +123,16 @@ export default function EpicChildren({
                 <PriorityBadge priority={child.priority} />
                 <span className="status-pill">{STATUS_LABELS[child.status]}</span>
                 <Avatar user={child.assignee} size={22} />
-                <button
-                  className="link-button"
-                  onClick={() => detach(child.ticketKey)}
-                  title="Remove from epic (keeps the ticket)"
-                >
-                  ✕
-                </button>
+                {child.archived && <span className="badge">archived</span>}
+                {!archived && !child.archived && (
+                  <button
+                    className="link-button"
+                    onClick={() => detach(child.ticketKey)}
+                    title="Remove from epic (keeps the ticket)"
+                  >
+                    ✕
+                  </button>
+                )}
               </div>
             ))}
           </div>

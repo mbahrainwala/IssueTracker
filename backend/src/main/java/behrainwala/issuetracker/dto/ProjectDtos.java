@@ -55,6 +55,9 @@ public final class ProjectDtos {
             String description,
             List<UserDto> leads,
             long ticketCount,
+            boolean archived,
+            Instant archivedAt,
+            UserDto archivedBy,
             Instant createdAt) {
 
         public static ProjectDto from(Project project, long ticketCount) {
@@ -65,6 +68,9 @@ public final class ProjectDtos {
                     project.getDescription(),
                     project.getLeads().stream().map(UserDto::from).toList(),
                     ticketCount,
+                    project.isArchived(),
+                    project.getArchivedAt(),
+                    UserDto.from(project.getArchivedBy()),
                     project.getCreatedAt());
         }
     }

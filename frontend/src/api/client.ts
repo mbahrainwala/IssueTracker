@@ -149,7 +149,13 @@ export const api = {
 
   deleteLink: (linkId: number) => request<void>(`/links/${linkId}`, { method: 'DELETE' }),
 
-  listProjects: () => request<Project[]>('/projects'),
+  /** Active projects by default; pass true for the archived tab. */
+  listProjects: (archived = false) =>
+    request<Project[]>(`/projects${query({ archived: archived ? 'true' : undefined })}`),
+
+  archiveProject: (key: string) => request<Project>(`/projects/${key}/archive`, { method: 'POST' }),
+
+  restoreProject: (key: string) => request<Project>(`/projects/${key}/restore`, { method: 'POST' }),
 
   getProject: (key: string) => request<Project>(`/projects/${key}`),
 
@@ -174,10 +180,27 @@ export const api = {
   removeMember: (key: string, userId: number) =>
     request<void>(`/projects/${key}/members/${userId}`, { method: 'DELETE' }),
 
+  /** Active tickets by default; pass archived: true for the archive tab. */
   listTickets: (
     key: string,
-    filters: { status?: TicketStatus | ''; assigneeId?: number | ''; q?: string; page?: number; size?: number } = {},
-  ) => request<Page<Ticket>>(`/projects/${key}/tickets${query(filters)}`),
+    filters: {
+      status?: TicketStatus | ''
+      assigneeId?: number | ''
+      q?: string
+      archived?: boolean
+      page?: number
+      size?: number
+    } = {},
+  ) =>
+    request<Page<Ticket>>(
+      `/projects/${key}/tickets${query({ ...filters, archived: filters.archived ? 'true' : undefined })}`,
+    ),
+
+  archiveTicket: (ticketKey: string) =>
+    request<Ticket>(`/tickets/${ticketKey}/archive`, { method: 'POST' }),
+
+  restoreTicket: (ticketKey: string) =>
+    request<Ticket>(`/tickets/${ticketKey}/restore`, { method: 'POST' }),
 
   createTicket: (
     key: string,

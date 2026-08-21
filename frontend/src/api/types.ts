@@ -36,6 +36,9 @@ export interface Project {
   /** A project can have several leads; leadership is a membership role. */
   leads: User[]
   ticketCount: number
+  archived: boolean
+  archivedAt: string | null
+  archivedBy: User | null
   createdAt: string
 }
 
@@ -58,6 +61,9 @@ export interface Ticket {
   assignee: User | null
   /** The epic this ticket sits under, if any. A ticket has at most one. */
   epic: EpicRef | null
+  archived: boolean
+  archivedAt: string | null
+  archivedBy: User | null
   storyPoints: number | null
   dueDate: string | null
   createdAt: string

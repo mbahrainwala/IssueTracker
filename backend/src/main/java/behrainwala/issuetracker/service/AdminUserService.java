@@ -37,15 +37,18 @@ public class AdminUserService {
     private final UserRepository userRepository;
     private final ProjectRepository projectRepository;
     private final ProjectMemberRepository memberRepository;
+    private final AccessGuard accessGuard;
     private final PasswordEncoder passwordEncoder;
 
     public AdminUserService(UserRepository userRepository,
                             ProjectRepository projectRepository,
                             ProjectMemberRepository memberRepository,
+                            AccessGuard accessGuard,
                             PasswordEncoder passwordEncoder) {
         this.userRepository = userRepository;
         this.projectRepository = projectRepository;
         this.memberRepository = memberRepository;
+        this.accessGuard = accessGuard;
         this.passwordEncoder = passwordEncoder;
     }
 
@@ -140,11 +143,17 @@ public class AdminUserService {
         for (Assignment assignment : request.assignments()) {
             Project project = projectRepository.findByProjectKeyIgnoreCase(assignment.projectKey())
                     .orElseThrow(() -> new NotFoundException("Project " + assignment.projectKey() + " not found"));
+            // This path is admin-only and bypasses AccessGuard, so the archive rule is restated.
+            accessGuard.requireActive(project);
             wanted.put(project.getProjectKey(), assignment.projectRole());
         }
 
         for (ProjectMember existing : memberRepository.findByUserId(userId)) {
             Project project = existing.getProject();
+            // Membership of an archived project stays as it is until the project comes back.
+            if (project.isArchived()) {
+                continue;
+            }
             ProjectRole role = wanted.remove(project.getProjectKey());
             boolean losingLead = existing.getProjectRole() == ProjectRole.LEAD && role != ProjectRole.LEAD;
             if (losingLead) {

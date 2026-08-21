@@ -1,31 +1,45 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ApiError, api } from '../api/client'
 import type { Project } from '../api/types'
 import Avatar from '../components/Avatar'
 import Modal from '../components/Modal'
+import { formatMovedAt } from '../components/StatusHistory'
 
 export default function ProjectsPage() {
   const [projects, setProjects] = useState<Project[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [notice, setNotice] = useState<string | null>(null)
   const [creating, setCreating] = useState(false)
+  const [showArchived, setShowArchived] = useState(false)
 
-  async function reload() {
+  const reload = useCallback(async () => {
     setLoading(true)
     try {
-      setProjects(await api.listProjects())
+      setProjects(await api.listProjects(showArchived))
       setError(null)
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Failed to load projects')
     } finally {
       setLoading(false)
     }
-  }
+  }, [showArchived])
 
   useEffect(() => {
     void reload()
-  }, [])
+  }, [reload])
+
+  async function restore(projectKey: string) {
+    try {
+      await api.restoreProject(projectKey)
+      setNotice(`${projectKey} restored.`)
+      setError(null)
+      await reload()
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not restore project')
+    }
+  }
 
   return (
     <div className="page">
@@ -34,23 +48,51 @@ export default function ProjectsPage() {
           <h1>Projects</h1>
           <p className="muted">Every project owns its own ticket numbering, e.g. PROJ1-1232.</p>
         </div>
-        <button className="btn btn-primary" onClick={() => setCreating(true)}>
-          New project
-        </button>
+        {!showArchived && (
+          <button className="btn btn-primary" onClick={() => setCreating(true)}>
+            New project
+          </button>
+        )}
+      </div>
+
+      <div className="toolbar">
+        <div className="segmented">
+          <button
+            className={!showArchived ? 'seg seg-active' : 'seg'}
+            onClick={() => setShowArchived(false)}
+          >
+            Active
+          </button>
+          <button
+            className={showArchived ? 'seg seg-active' : 'seg'}
+            onClick={() => setShowArchived(true)}
+          >
+            Archived
+          </button>
+        </div>
       </div>
 
       {error && <p className="error">{error}</p>}
+      {notice && <p className="notice">{notice}</p>}
       {loading ? (
         <p className="muted">Loading projects…</p>
       ) : projects.length === 0 ? (
         <div className="card empty-state">
-          <h3>No projects yet</h3>
-          <p className="muted">Create your first project to start filing tickets.</p>
+          <h3>{showArchived ? 'Nothing archived' : 'No projects yet'}</h3>
+          <p className="muted">
+            {showArchived
+              ? 'Archived projects are hidden from the active list but can be restored at any time.'
+              : 'Create your first project to start filing tickets.'}
+          </p>
         </div>
       ) : (
         <div className="project-grid">
           {projects.map((project) => (
-            <Link key={project.id} to={`/projects/${project.projectKey}`} className="card project-card">
+            <Link
+              key={project.id}
+              to={`/projects/${project.projectKey}`}
+              className={project.archived ? 'card project-card project-card-archived' : 'card project-card'}
+            >
               <div className="project-card-head">
                 <span className="project-key">{project.projectKey}</span>
                 <span className="muted">{project.ticketCount} tickets</span>
@@ -77,7 +119,28 @@ export default function ProjectsPage() {
                     </span>
                   </>
                 )}
+                {project.archived && (
+                  <>
+                    <span className="spacer" />
+                    <button
+                      className="link-button"
+                      onClick={(e) => {
+                        // The card is a link; restoring should not navigate.
+                        e.preventDefault()
+                        void restore(project.projectKey)
+                      }}
+                    >
+                      Restore
+                    </button>
+                  </>
+                )}
               </div>
+              {project.archived && project.archivedAt && (
+                <p className="muted archived-note">
+                  Archived {formatMovedAt(project.archivedAt)}
+                  {project.archivedBy ? ` by ${project.archivedBy.displayName}` : ''}
+                </p>
+              )}
             </Link>
           ))}
         </div>

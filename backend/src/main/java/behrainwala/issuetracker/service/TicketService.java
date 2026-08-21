@@ -55,13 +55,72 @@ public class TicketService {
                                 TicketStatus status,
                                 Long assigneeId,
                                 String q,
+                                boolean archived,
                                 Pageable pageable,
                                 User current) {
         Project project = projectService.requireByKey(projectKey);
         accessGuard.requireView(project, current);
-        return ticketRepository
-                .search(project.getId(), status == null ? null : status.name(), assigneeId, blankToNull(q), pageable)
-                .map(TicketDto::from);
+        Page<Ticket> page = archived
+                ? ticketRepository.searchArchived(project.getId(), assigneeId, blankToNull(q), pageable)
+                : ticketRepository.search(project.getId(),
+                        status == null ? null : status.name(), assigneeId, blankToNull(q), pageable);
+        return page.map(TicketDto::from);
+    }
+
+    /**
+     * Archives a finished ticket. Only DONE work can be archived, and an epic additionally
+     * needs every one of its tickets archived first - otherwise archiving the epic would
+     * hide live work behind it.
+     */
+    @Transactional
+    public TicketDto archive(String ticketKey, User current) {
+        Ticket ticket = requireByKey(ticketKey);
+        accessGuard.requireWrite(ticket.getProject(), current);
+
+        if (ticket.isArchived()) {
+            throw new ConflictException(ticket.getTicketKey() + " is already archived");
+        }
+        if (ticket.getStatus() != TicketStatus.DONE) {
+            throw new ConflictException(
+                    "Only tickets in %s can be archived - %s is in %s"
+                            .formatted(TicketStatus.DONE.getLabel(), ticket.getTicketKey(),
+                                    ticket.getStatus().getLabel()));
+        }
+        if (ticket.getType() == TicketType.EPIC) {
+            long live = ticketRepository.countByEpicIdAndArchivedAtIsNull(ticket.getId());
+            if (live > 0) {
+                throw new ConflictException(
+                        "%s still has %d ticket%s that %s not archived - archive them first"
+                                .formatted(ticket.getTicketKey(), live, live == 1 ? "" : "s",
+                                        live == 1 ? "is" : "are"));
+            }
+        }
+        ticket.archive(current);
+        return TicketDto.from(ticket);
+    }
+
+    /** Brings a ticket back into the active views. */
+    @Transactional
+    public TicketDto restore(String ticketKey, User current) {
+        Ticket ticket = requireByKey(ticketKey);
+        accessGuard.requireWrite(ticket.getProject(), current);
+
+        if (!ticket.isArchived()) {
+            throw new ConflictException(ticket.getTicketKey() + " is not archived");
+        }
+        // Restoring a child under an archived epic would leave live work hidden behind it.
+        if (ticket.getEpic() != null && ticket.getEpic().isArchived()) {
+            throw new ConflictException(
+                    "Its epic %s is archived - restore the epic first"
+                            .formatted(ticket.getEpic().getTicketKey()));
+        }
+        ticket.restore();
+        return TicketDto.from(ticket);
+    }
+
+    /** Archived tickets are frozen: restore before editing or moving them. */
+    private void requireNotArchived(Ticket ticket) {
+        accessGuard.requireActive(ticket);
     }
 
     /**
@@ -138,6 +197,11 @@ public class TicketService {
         if (epic.getType() != TicketType.EPIC) {
             throw new ConflictException(epic.getTicketKey() + " is not an epic");
         }
+        // Filing live work under an archived epic would hide it, same reasoning as restore.
+        if (epic.isArchived()) {
+            throw new ConflictException(
+                    "Epic " + epic.getTicketKey() + " is archived - restore it first");
+        }
         if (!epic.getProject().getId().equals(ticket.getProject().getId())) {
             throw new ConflictException("An epic must belong to the same project as its tickets");
         }
@@ -189,8 +253,10 @@ public class TicketService {
         Ticket epic = requireEpic(epicKey);
         accessGuard.requireWrite(epic.getProject(), current);
 
+        requireNotArchived(epic);
         for (String key : ticketKeys) {
             Ticket ticket = requireByKey(key);
+            requireNotArchived(ticket);
             // resolveEpic re-checks same-project, not-an-epic and no-self-parent for each one.
             ticket.setEpic(resolveEpic(epic.getTicketKey(), ticket));
         }
@@ -217,6 +283,7 @@ public class TicketService {
     public TicketDto update(String ticketKey, UpdateTicketRequest request, User current) {
         Ticket ticket = requireByKey(ticketKey);
         accessGuard.requireWrite(ticket.getProject(), current);
+        requireNotArchived(ticket);
 
         if (request.title() != null) {
             ticket.setTitle(request.title());
@@ -260,6 +327,7 @@ public class TicketService {
     public TicketDto transition(String ticketKey, TicketStatus status, User current) {
         Ticket ticket = requireByKey(ticketKey);
         accessGuard.requireWrite(ticket.getProject(), current);
+        requireNotArchived(ticket);
         recordMove(ticket, status, current);
         return TicketDto.from(ticket);
     }

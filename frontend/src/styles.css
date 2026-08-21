@@ -431,6 +431,21 @@ label input, label select, label textarea { font-weight: 400; color: var(--text)
 }
 .epic-progress > div { height: 100%; background: #36b37e; transition: width 0.2s ease; }
 
+/* ---------- archive ---------- */
+.side-fields {
+  border: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+.side-fields:disabled { opacity: 0.6; }
+.archived-banner { font-size: 13px; }
+.project-card-archived { opacity: 0.72; border-style: dashed; }
+.archived-note { font-size: 11px; margin: 0; }
+
 /* ---------- status history ---------- */
 .history {
   border-top: 1px solid var(--border);

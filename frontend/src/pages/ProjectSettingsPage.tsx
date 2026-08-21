@@ -4,6 +4,7 @@ import { ApiError, api } from '../api/client'
 import type { Member, Project, ProjectRole, User } from '../api/types'
 import { PROJECT_ROLES } from '../api/types'
 import Avatar from '../components/Avatar'
+import { formatMovedAt } from '../components/StatusHistory'
 
 export default function ProjectSettingsPage() {
   const { projectKey = '' } = useParams()
@@ -92,6 +93,28 @@ export default function ProjectSettingsPage() {
     }
   }
 
+  async function archiveProject() {
+    setStatus(null)
+    try {
+      await api.archiveProject(projectKey)
+      setError(null)
+      await reload()
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not archive project')
+    }
+  }
+
+  async function restoreProject() {
+    setStatus(null)
+    try {
+      await api.restoreProject(projectKey)
+      setError(null)
+      await reload()
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not restore project')
+    }
+  }
+
   async function deleteProject() {
     if (!confirm(`Delete project ${projectKey} and all of its tickets?`)) return
     try {
@@ -119,8 +142,15 @@ export default function ProjectSettingsPage() {
       {error && <p className="error">{error}</p>}
       {status && <p className="notice">{status}</p>}
 
+      {project.archived && (
+        <p className="notice">
+          This project is archived and read-only. Restore it below to make changes.
+        </p>
+      )}
+
       <div className="settings-grid">
         <form className="card form" onSubmit={saveDetails}>
+          <fieldset className="side-fields" disabled={project.archived}>
           <h2>Details</h2>
           <label>
             Key
@@ -138,9 +168,11 @@ export default function ProjectSettingsPage() {
           <div className="form-actions">
             <button className="btn btn-primary">Save changes</button>
           </div>
+          </fieldset>
         </form>
 
         <div className="card">
+          <fieldset className="side-fields" disabled={project.archived}>
           <h2>Members</h2>
           <p className="muted">
             Any lead can add people and change roles. A project can have several leads — promote a
@@ -188,12 +220,42 @@ export default function ProjectSettingsPage() {
               Add
             </button>
           </form>
+          </fieldset>
         </div>
+      </div>
+
+      <div className="card">
+        <h2>{project.archived ? 'Archived' : 'Archive'}</h2>
+        {project.archived ? (
+          <>
+            <p className="muted">
+              Archived{project.archivedAt ? ` on ${formatMovedAt(project.archivedAt)}` : ''}
+              {project.archivedBy ? ` by ${project.archivedBy.displayName}` : ''}. It is hidden
+              from the active project list and read-only until restored. Nothing has been lost.
+            </p>
+            <button className="btn btn-primary" onClick={restoreProject}>
+              Restore project
+            </button>
+          </>
+        ) : (
+          <>
+            <p className="muted">
+              Archiving hides this project from the active list and makes it read-only. Everything
+              is kept, and you can restore it at any time.
+            </p>
+            <button className="btn btn-ghost" onClick={archiveProject}>
+              Archive project
+            </button>
+          </>
+        )}
       </div>
 
       <div className="card danger-zone">
         <h2>Danger zone</h2>
-        <p className="muted">Deleting a project permanently removes its tickets and comments.</p>
+        <p className="muted">
+          Deleting a project permanently removes its tickets and comments. Archive it instead if
+          you might want it back.
+        </p>
         <button className="btn btn-danger" onClick={deleteProject}>
           Delete project
         </button>
