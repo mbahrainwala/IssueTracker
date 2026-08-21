@@ -206,6 +206,36 @@ class ProjectArchiveApiTest {
     }
 
     @Test
+    void aProjectWithTicketsCannotBeDeleted() throws Exception {
+        createProject("FULL");
+        String key = mapper.readTree(mvc.perform(post("/api/projects/FULL/tickets")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("Authorization", "Bearer " + token)
+                        .content("{\"title\":\"In the way\"}"))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString()).get("ticketKey").asText();
+
+        mvc.perform(delete("/api/projects/FULL").header("Authorization", "Bearer " + token))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.detail").value(
+                        "FULL still has 1 ticket, archived included - delete them before deleting the project"));
+
+        // Archiving the ticket is not the same as removing it, so the project is still blocked.
+        mvc.perform(patch("/api/tickets/" + key + "/status").param("status", "DONE")
+                .header("Authorization", "Bearer " + token)).andExpect(status().isOk());
+        mvc.perform(post("/api/tickets/" + key + "/archive")
+                .header("Authorization", "Bearer " + token)).andExpect(status().isOk());
+        mvc.perform(delete("/api/projects/FULL").header("Authorization", "Bearer " + token))
+                .andExpect(status().isConflict());
+
+        // Emptied, it goes.
+        mvc.perform(delete("/api/tickets/" + key).header("Authorization", "Bearer " + token))
+                .andExpect(status().isNoContent());
+        mvc.perform(delete("/api/projects/FULL").header("Authorization", "Bearer " + token))
+                .andExpect(status().isNoContent());
+    }
+
+    @Test
     void onlyLeadsAndAdminsMayArchive() throws Exception {
         createProject("GUARDED");
         mvc.perform(post("/api/projects/GUARDED/members")

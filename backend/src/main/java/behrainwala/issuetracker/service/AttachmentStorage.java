@@ -1,9 +1,13 @@
 package behrainwala.issuetracker.service;
 
 import behrainwala.issuetracker.config.AppProperties;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.core.io.Resource;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
@@ -15,8 +19,12 @@ import java.nio.file.StandardCopyOption;
 import java.security.DigestInputStream;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.time.Instant;
+import java.util.Collection;
 import java.util.HexFormat;
+import java.util.List;
 import java.util.UUID;
+import java.util.stream.Stream;
 
 /**
  * The bytes half of an attachment. Every file is written under a fresh UUID with no
@@ -26,6 +34,8 @@ import java.util.UUID;
  */
 @Component
 public class AttachmentStorage {
+
+    private static final Logger log = LoggerFactory.getLogger(AttachmentStorage.class);
 
     private final Path root;
 
@@ -65,12 +75,69 @@ public class AttachmentStorage {
         return Files.isRegularFile(pathOf(storageKey));
     }
 
-    /** Best effort: a missing file must not block deleting the row that points at it. */
+    /**
+     * Every file currently in the store, by key. The directory is flat and holds nothing but
+     * attachments, so a file name is a storage key.
+     */
+    public List<String> listStorageKeys() {
+        if (!Files.isDirectory(root)) {
+            return List.of();
+        }
+        try (Stream<Path> files = Files.list(root)) {
+            return files.filter(Files::isRegularFile)
+                    .map(path -> path.getFileName().toString())
+                    .toList();
+        } catch (IOException e) {
+            throw new UncheckedIOException("Could not list the attachment directory", e);
+        }
+    }
+
+    /**
+     * When the file was last written, or {@link Instant#now()} if that cannot be read - an
+     * unreadable timestamp makes a file look brand new, which keeps the sweeper off it.
+     */
+    public Instant lastModified(String storageKey) {
+        try {
+            return Files.getLastModifiedTime(pathOf(storageKey)).toInstant();
+        } catch (IOException e) {
+            return Instant.now();
+        }
+    }
+
+    /**
+     * Clears stored files once the surrounding transaction commits.
+     * <p>
+     * Deleting them inline would lose the bytes for good if the transaction then rolled back,
+     * leaving rows pointing at nothing. Waiting for the commit inverts the failure: if the
+     * unlink fails the file is merely orphaned, which wastes disk but loses nothing. Outside a
+     * transaction - which is how a test or a plain call reaches this - it deletes immediately.
+     */
+    public void deleteAfterCommit(Collection<String> storageKeys) {
+        if (storageKeys.isEmpty()) {
+            return;
+        }
+        List<String> keys = List.copyOf(storageKeys);
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            keys.forEach(this::delete);
+            return;
+        }
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                keys.forEach(AttachmentStorage.this::delete);
+            }
+        });
+    }
+
+    /**
+     * Best effort: a file that is already gone must not fail the caller, and neither must one
+     * the OS refuses to unlink - by the time this runs the row it belonged to is committed.
+     */
     public void delete(String storageKey) {
         try {
             Files.deleteIfExists(pathOf(storageKey));
         } catch (IOException e) {
-            throw new UncheckedIOException("Could not delete attachment " + storageKey, e);
+            log.warn("Could not delete attachment file {} - it is now orphaned", storageKey, e);
         }
     }
 

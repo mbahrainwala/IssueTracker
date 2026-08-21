@@ -1,5 +1,7 @@
 package behrainwala.issuetracker;
 
+import behrainwala.issuetracker.repo.AttachmentRepository;
+import behrainwala.issuetracker.service.AttachmentStorage;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -14,6 +16,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
@@ -42,6 +45,13 @@ class AttachmentApiTest {
 
     @Autowired
     private ObjectMapper mapper;
+
+    /** Injected so the assertions can look at the disk, not just the API responses. */
+    @Autowired
+    private AttachmentRepository attachmentRepository;
+
+    @Autowired
+    private AttachmentStorage storage;
 
     private static String ownerToken;
     private static String outsiderToken;
@@ -203,6 +213,56 @@ class AttachmentApiTest {
         // Reading an archived ticket's documents is still fine.
         mvc.perform(get("/api/attachments/" + id).header("Authorization", "Bearer " + ownerToken))
                 .andExpect(status().isOk());
+    }
+
+    @Test
+    void deletingATicketClearsItsDocumentsFromDisk() throws Exception {
+        String key = mapper.readTree(mvc.perform(post("/api/projects/DOC/tickets")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("Authorization", "Bearer " + ownerToken)
+                        .content("{\"title\":\"Doomed, with documents\"}"))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString()).get("ticketKey").asText();
+
+        for (String name : new String[]{"one.pdf", "two.pdf"}) {
+            mvc.perform(multipart("/api/tickets/" + key + "/attachments")
+                            .file(new MockMultipartFile("file", name, "application/pdf", pdf(name)))
+                            .header("Authorization", "Bearer " + ownerToken))
+                    .andExpect(status().isCreated());
+        }
+
+        long ticketId = mapper.readTree(mvc.perform(get("/api/tickets/" + key)
+                        .header("Authorization", "Bearer " + ownerToken))
+                .andReturn().getResponse().getContentAsString()).get("id").asLong();
+        List<String> keys = attachmentRepository.findStorageKeysByTicketId(ticketId);
+        assertThat(keys).hasSize(2);
+        assertThat(keys).allMatch(storage::exists);
+
+        mvc.perform(delete("/api/tickets/" + key).header("Authorization", "Bearer " + ownerToken))
+                .andExpect(status().isNoContent());
+
+        // The rows go with the ticket; the files must not be left behind on disk.
+        assertThat(attachmentRepository.findStorageKeysByTicketId(ticketId)).isEmpty();
+        assertThat(keys).noneMatch(storage::exists);
+    }
+
+    @Test
+    void removingOneDocumentClearsOnlyItsOwnFile() throws Exception {
+        long kept = mapper.readTree(upload(ownerToken, "kept.pdf", pdf("kept"))
+                        .andExpect(status().isCreated())
+                        .andReturn().getResponse().getContentAsString()).get("id").asLong();
+        long removed = mapper.readTree(upload(ownerToken, "removed.pdf", pdf("removed"))
+                        .andExpect(status().isCreated())
+                        .andReturn().getResponse().getContentAsString()).get("id").asLong();
+
+        String keptKey = attachmentRepository.findById(kept).orElseThrow().getStorageKey();
+        String removedKey = attachmentRepository.findById(removed).orElseThrow().getStorageKey();
+
+        mvc.perform(delete("/api/attachments/" + removed).header("Authorization", "Bearer " + ownerToken))
+                .andExpect(status().isNoContent());
+
+        assertThat(storage.exists(removedKey)).isFalse();
+        assertThat(storage.exists(keptKey)).isTrue();
     }
 
     @Test

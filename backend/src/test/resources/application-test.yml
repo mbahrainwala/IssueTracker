@@ -14,3 +14,6 @@ app:
   attachments:
     # Kept out of the working tree; the OS clears it.
     directory: ${java.io.tmpdir}/issuetracker-test-attachments
+    # No background sweeping during tests - the sweep is called directly instead.
+    sweep-cron: "-"
+    orphan-grace: 0s

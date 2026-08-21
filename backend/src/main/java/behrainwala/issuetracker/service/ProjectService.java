@@ -130,6 +130,16 @@ public class ProjectService {
         Project project = requireByKey(projectKey);
         // Deliberately not requireAdmin: an archived project must still be deletable.
         accessGuard.requireAdminister(project, current);
+
+        // An empty project is a bookkeeping mistake; one with tickets is a body of work, and
+        // deleting it would take those tickets - and their comments, attachments and history -
+        // with it in a single click. Emptying it first makes that deliberate.
+        long tickets = ticketRepository.countByProjectId(project.getId());
+        if (tickets > 0) {
+            throw new ConflictException(
+                    "%s still has %d ticket%s, archived included - delete them before deleting the project"
+                            .formatted(project.getProjectKey(), tickets, tickets == 1 ? "" : "s"));
+        }
         projectRepository.delete(project);
     }
 

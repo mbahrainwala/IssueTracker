@@ -2,6 +2,7 @@ package behrainwala.issuetracker.config;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
+import java.time.Duration;
 import java.util.List;
 
 @ConfigurationProperties(prefix = "app")
@@ -64,6 +65,13 @@ public class AppProperties {
         private String directory = "data/attachments";
         private long maxSizeBytes = 10L * 1024 * 1024;
         private int maxPerTicket = 20;
+        private String sweepCron = "0 30 3 * * *";
+        private String sweepZone = "UTC";
+        /**
+         * How old a file with no row must be before the sweep will remove it. Covers the gap
+         * between an upload writing its bytes and committing its row.
+         */
+        private Duration orphanGrace = Duration.ofHours(6);
 
         public String getDirectory() {
             return directory;
@@ -87,6 +95,30 @@ public class AppProperties {
 
         public void setMaxPerTicket(int maxPerTicket) {
             this.maxPerTicket = maxPerTicket;
+        }
+
+        public String getSweepCron() {
+            return sweepCron;
+        }
+
+        public void setSweepCron(String sweepCron) {
+            this.sweepCron = sweepCron;
+        }
+
+        public String getSweepZone() {
+            return sweepZone;
+        }
+
+        public void setSweepZone(String sweepZone) {
+            this.sweepZone = sweepZone;
+        }
+
+        public Duration getOrphanGrace() {
+            return orphanGrace;
+        }
+
+        public void setOrphanGrace(Duration orphanGrace) {
+            this.orphanGrace = orphanGrace;
         }
     }
 }

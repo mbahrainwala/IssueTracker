@@ -38,6 +38,10 @@ app:
     directory: ${ATTACHMENT_DIR:data/attachments}
     max-size-bytes: ${ATTACHMENT_MAX_BYTES:10485760}
     max-per-ticket: ${ATTACHMENT_MAX_PER_TICKET:20}
+    # Nightly sweep for files no database row points at. "-" disables the schedule.
+    sweep-cron: ${ATTACHMENT_SWEEP_CRON:0 30 3 * * *}
+    sweep-zone: ${ATTACHMENT_SWEEP_ZONE:UTC}
+    orphan-grace: ${ATTACHMENT_ORPHAN_GRACE:6h}
 
 logging:
   level:

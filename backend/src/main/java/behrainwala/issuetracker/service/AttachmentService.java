@@ -124,7 +124,7 @@ public class AttachmentService {
         accessGuard.requireActive(ticket);
 
         attachmentRepository.delete(attachment);
-        storage.delete(attachment.getStorageKey());
+        storage.deleteAfterCommit(List.of(attachment.getStorageKey()));
     }
 
     private Attachment requireAttachment(Long attachmentId) {

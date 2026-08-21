@@ -22,4 +22,15 @@ public interface AttachmentRepository extends JpaRepository<Attachment, Long> {
     List<Attachment> findByTicketId(@Param("ticketId") Long ticketId);
 
     long countByTicketId(Long ticketId);
+
+    /**
+     * The stored files belonging to a ticket. Deleting the ticket cascades the rows away in
+     * the database, so the keys have to be read before that happens to clear the disk too.
+     */
+    @Query("select a.storageKey from Attachment a where a.ticket.id = :ticketId")
+    List<String> findStorageKeysByTicketId(@Param("ticketId") Long ticketId);
+
+    /** Every key the database still claims, for the nightly orphan sweep to compare against. */
+    @Query("select a.storageKey from Attachment a")
+    List<String> findAllStorageKeys();
 }

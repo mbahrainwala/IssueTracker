@@ -13,6 +13,7 @@ import behrainwala.issuetracker.dto.TicketDtos.TicketDto;
 import behrainwala.issuetracker.dto.TicketDtos.UpdateTicketRequest;
 import behrainwala.issuetracker.dto.TicketHistoryDtos.StatusChangeDto;
 import behrainwala.issuetracker.dto.TicketLinkDtos.LinkedTicketDto;
+import behrainwala.issuetracker.repo.AttachmentRepository;
 import behrainwala.issuetracker.repo.ProjectRepository;
 import behrainwala.issuetracker.repo.TicketRepository;
 import behrainwala.issuetracker.repo.TicketStatusChangeRepository;
@@ -33,6 +34,8 @@ public class TicketService {
     private final TicketRepository ticketRepository;
     private final ProjectRepository projectRepository;
     private final TicketStatusChangeRepository statusChangeRepository;
+    private final AttachmentRepository attachmentRepository;
+    private final AttachmentStorage attachmentStorage;
     private final ProjectService projectService;
     private final UserService userService;
     private final AccessGuard accessGuard;
@@ -40,12 +43,16 @@ public class TicketService {
     public TicketService(TicketRepository ticketRepository,
                          ProjectRepository projectRepository,
                          TicketStatusChangeRepository statusChangeRepository,
+                         AttachmentRepository attachmentRepository,
+                         AttachmentStorage attachmentStorage,
                          ProjectService projectService,
                          UserService userService,
                          AccessGuard accessGuard) {
         this.ticketRepository = ticketRepository;
         this.projectRepository = projectRepository;
         this.statusChangeRepository = statusChangeRepository;
+        this.attachmentRepository = attachmentRepository;
+        this.attachmentStorage = attachmentStorage;
         this.projectService = projectService;
         this.userService = userService;
         this.accessGuard = accessGuard;
@@ -354,7 +361,12 @@ public class TicketService {
         // the ticket's comments, attachments, links and history with it and cannot be undone.
         accessGuard.requireGlobalAdmin(current, "Only an administrator can delete a ticket");
         accessGuard.requireActive(ticket.getProject());
+
+        // The database cascade clears the attachment rows; the files they point at are not
+        // its to reach, so their keys are read now and the disk cleared once this commits.
+        List<String> storageKeys = attachmentRepository.findStorageKeysByTicketId(ticket.getId());
         ticketRepository.delete(ticket);
+        attachmentStorage.deleteAfterCommit(storageKeys);
     }
 
     private static String blankToNull(String value) {

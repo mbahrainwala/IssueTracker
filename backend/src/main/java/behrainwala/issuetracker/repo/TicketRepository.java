@@ -20,6 +20,9 @@ public interface TicketRepository extends JpaRepository<Ticket, Long> {
     /** Project cards count live work, not the archive. */
     long countByProjectIdAndArchivedAtIsNull(Long projectId);
 
+    /** Every ticket, archived included - what stands between a project and being deletable. */
+    long countByProjectId(Long projectId);
+
     /** All children, archived included - an epic's archive-readiness depends on seeing them. */
     List<Ticket> findByEpicIdOrderByTicketNumberDesc(Long epicId);
 

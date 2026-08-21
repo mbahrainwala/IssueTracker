@@ -117,7 +117,9 @@ export default function ProjectSettingsPage() {
   }
 
   async function deleteProject() {
-    if (!confirm(`Delete project ${projectKey} and all of its tickets?`)) return
+    // The API refuses a project that still has tickets, so there is nothing to warn about
+    // losing here - an empty project is all that can reach this point.
+    if (!confirm(`Delete project ${projectKey}?`)) return
     try {
       await api.deleteProject(projectKey)
       navigate('/projects')
@@ -254,8 +256,8 @@ export default function ProjectSettingsPage() {
       <div className="card danger-zone">
         <h2>Danger zone</h2>
         <p className="muted">
-          Deleting a project permanently removes its tickets and comments. Archive it instead if
-          you might want it back.
+          A project can only be deleted once it is empty — delete its tickets first, archived ones
+          included. Archive the project instead if you might want it back.
         </p>
         <button className="btn btn-danger" onClick={deleteProject}>
           Delete project
