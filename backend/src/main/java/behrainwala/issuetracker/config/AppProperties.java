@@ -9,6 +9,7 @@ public class AppProperties {
 
     private final Jwt jwt = new Jwt();
     private final Cors cors = new Cors();
+    private final Attachments attachments = new Attachments();
 
     public Jwt getJwt() {
         return jwt;
@@ -16,6 +17,10 @@ public class AppProperties {
 
     public Cors getCors() {
         return cors;
+    }
+
+    public Attachments getAttachments() {
+        return attachments;
     }
 
     public static class Jwt {
@@ -48,6 +53,40 @@ public class AppProperties {
 
         public void setAllowedOrigins(List<String> allowedOrigins) {
             this.allowedOrigins = allowedOrigins;
+        }
+    }
+
+    /**
+     * Where ticket documents are kept and how large they may be. The directory holds only
+     * opaque UUID files and must sit outside anything the server publishes statically.
+     */
+    public static class Attachments {
+        private String directory = "data/attachments";
+        private long maxSizeBytes = 10L * 1024 * 1024;
+        private int maxPerTicket = 20;
+
+        public String getDirectory() {
+            return directory;
+        }
+
+        public void setDirectory(String directory) {
+            this.directory = directory;
+        }
+
+        public long getMaxSizeBytes() {
+            return maxSizeBytes;
+        }
+
+        public void setMaxSizeBytes(long maxSizeBytes) {
+            this.maxSizeBytes = maxSizeBytes;
+        }
+
+        public int getMaxPerTicket() {
+            return maxPerTicket;
+        }
+
+        public void setMaxPerTicket(int maxPerTicket) {
+            this.maxPerTicket = maxPerTicket;
         }
     }
 }

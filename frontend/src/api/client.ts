@@ -1,4 +1,5 @@
 import type {
+  Attachment,
   AuthResponse,
   Comment,
   EpicRef,
@@ -40,11 +41,18 @@ export class ApiError extends Error {
   }
 }
 
-async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const token = getToken()
+function authHeaders(init: RequestInit = {}): Headers {
   const headers = new Headers(init.headers)
-  if (init.body) headers.set('Content-Type', 'application/json')
+  const token = getToken()
   if (token) headers.set('Authorization', `Bearer ${token}`)
+  return headers
+}
+
+async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
+  const headers = authHeaders(init)
+  // FormData sets its own multipart Content-Type, boundary included - overriding it breaks
+  // the upload, so only JSON bodies get the header.
+  if (init.body && !(init.body instanceof FormData)) headers.set('Content-Type', 'application/json')
 
   const response = await fetch(`/api${path}`, { ...init, headers })
 
@@ -256,4 +264,41 @@ export const api = {
     request<Comment>(`/comments/${commentId}`, { method: 'PUT', body: JSON.stringify({ body }) }),
 
   deleteComment: (commentId: number) => request<void>(`/comments/${commentId}`, { method: 'DELETE' }),
+
+  // --- attachments ---
+  listAttachments: (ticketKey: string) => request<Attachment[]>(`/tickets/${ticketKey}/attachments`),
+
+  uploadAttachment: (ticketKey: string, file: File) => {
+    const form = new FormData()
+    form.append('file', file)
+    return request<Attachment>(`/tickets/${ticketKey}/attachments`, { method: 'POST', body: form })
+  },
+
+  deleteAttachment: (attachmentId: number) =>
+    request<void>(`/attachments/${attachmentId}`, { method: 'DELETE' }),
+
+  /**
+   * Fetches the bytes and hands the browser a save prompt.
+   *
+   * The download cannot be a plain href: the endpoint is authorised by the bearer token,
+   * which only a fetch can carry. So the file is pulled as a blob and clicked through a
+   * temporary object URL, which is revoked immediately afterwards.
+   */
+  downloadAttachment: async (attachmentId: number, filename: string) => {
+    const response = await fetch(`/api/attachments/${attachmentId}`, { headers: authHeaders() })
+    if (!response.ok) {
+      const text = await response.text()
+      const payload = text ? JSON.parse(text) : null
+      throw new ApiError(response.status, payload?.detail ?? response.statusText)
+    }
+    const url = URL.createObjectURL(await response.blob())
+    try {
+      const anchor = document.createElement('a')
+      anchor.href = url
+      anchor.download = filename
+      anchor.click()
+    } finally {
+      URL.revokeObjectURL(url)
+    }
+  },
 }

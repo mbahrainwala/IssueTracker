@@ -5,6 +5,7 @@ import type { Project, Ticket, TicketStatus, User } from '../api/types'
 import { STATUS_LABELS, TICKET_STATUSES } from '../api/types'
 import Avatar from '../components/Avatar'
 import CreateTicketModal from '../components/CreateTicketModal'
+import RichText from '../components/RichText'
 import { formatDateTime } from '../format'
 import { PriorityBadge, TypeBadge } from '../components/Badges'
 
@@ -104,7 +105,9 @@ export default function ProjectBoardPage() {
             <Link to="/projects">Projects</Link> <span>/</span> <span>{project.projectKey}</span>
           </div>
           <h1>{project.name}</h1>
-          <p className="muted">{project.description || 'No description'}</p>
+          <p className="muted">
+            {project.description ? <RichText text={project.description} /> : 'No description'}
+          </p>
         </div>
         <div className="header-actions">
           <Link className="btn btn-ghost" to={`/projects/${project.projectKey}/settings`}>

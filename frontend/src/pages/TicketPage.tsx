@@ -3,9 +3,11 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import { ApiError, api } from '../api/client'
 import type { Comment, EpicRef, Member, Ticket, TicketPriority, TicketStatus, TicketType } from '../api/types'
 import { STATUS_LABELS, TICKET_PRIORITIES, TICKET_STATUSES, TICKET_TYPES } from '../api/types'
+import Attachments from '../components/Attachments'
 import Avatar from '../components/Avatar'
 import { PriorityBadge, TypeBadge } from '../components/Badges'
 import EpicChildren from '../components/EpicChildren'
+import RichText from '../components/RichText'
 import StatusHistory from '../components/StatusHistory'
 import TicketLinks from '../components/TicketLinks'
 import { useAuth } from '../auth/AuthContext'
@@ -213,7 +215,13 @@ export default function TicketPage() {
           ) : (
             <>
               <h1 className="ticket-heading">{ticket.title}</h1>
-              <p className="ticket-description">{ticket.description || <span className="muted">No description</span>}</p>
+              <p className="ticket-description">
+                {ticket.description ? (
+                  <RichText text={ticket.description} />
+                ) : (
+                  <span className="muted">No description</span>
+                )}
+              </p>
               {!ticket.archived && (
                 <button className="btn btn-ghost" onClick={() => setEditingBody(true)}>
                   Edit
@@ -231,6 +239,8 @@ export default function TicketPage() {
             />
           )}
 
+          <Attachments ticketKey={ticket.ticketKey} archived={ticket.archived} />
+
           <StatusHistory ticketKey={ticket.ticketKey} refreshToken={historyToken} />
 
           <TicketLinks ticketKey={ticket.ticketKey} />
@@ -244,27 +254,35 @@ export default function TicketPage() {
                   <div className="comment-head">
                     <strong>{comment.author.displayName}</strong>
                     <span className="muted">{formatDateTime(comment.createdAt)}</span>
-                    {(user?.id === comment.author.id || user?.role === 'ADMIN') && (
-                      <button className="link-button" onClick={() => removeComment(comment.id)}>
-                        Delete
-                      </button>
-                    )}
+                    {!ticket.archived &&
+                      (user?.id === comment.author.id || user?.role === 'ADMIN') && (
+                        <button className="link-button" onClick={() => removeComment(comment.id)}>
+                          Delete
+                        </button>
+                      )}
                   </div>
-                  <p>{comment.body}</p>
+                  <p>
+                    <RichText text={comment.body} />
+                  </p>
                 </div>
               </article>
             ))}
-            <form className="comment-form" onSubmit={postComment}>
-              <textarea
-                rows={3}
-                placeholder="Leave a comment…"
-                value={newComment}
-                onChange={(e) => setNewComment(e.target.value)}
-              />
-              <button className="btn btn-primary" disabled={!newComment.trim()}>
-                Comment
-              </button>
-            </form>
+            {/* An archived ticket takes no new comments, so it offers no box to write one. */}
+            {ticket.archived ? (
+              <p className="muted">Restore this ticket to comment on it.</p>
+            ) : (
+              <form className="comment-form" onSubmit={postComment}>
+                <textarea
+                  rows={3}
+                  placeholder="Leave a comment…"
+                  value={newComment}
+                  onChange={(e) => setNewComment(e.target.value)}
+                />
+                <button className="btn btn-primary" disabled={!newComment.trim()}>
+                  Comment
+                </button>
+              </form>
+            )}
           </section>
         </div>
 

@@ -11,3 +11,6 @@ app:
   seed-demo-data: false
   jwt:
     secret: test-secret-key-that-is-long-enough-for-hs256-0123456789
+  attachments:
+    # Kept out of the working tree; the OS clears it.
+    directory: ${java.io.tmpdir}/issuetracker-test-attachments

@@ -134,6 +134,15 @@ export interface StatusChange {
   summary: string
 }
 
+export interface Attachment {
+  id: number
+  filename: string
+  contentType: string
+  sizeBytes: number
+  uploadedBy: User
+  uploadedAt: string
+}
+
 export interface EpicRef {
   id: number
   ticketKey: string

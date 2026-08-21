@@ -7,7 +7,6 @@ import behrainwala.issuetracker.dto.CommentDtos.CommentDto;
 import behrainwala.issuetracker.dto.CommentDtos.CommentRequest;
 import behrainwala.issuetracker.repo.CommentRepository;
 import behrainwala.issuetracker.web.NotFoundException;
-import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -48,7 +47,7 @@ public class CommentService {
     @Transactional
     public CommentDto update(Long commentId, CommentRequest request, User current) {
         Comment comment = requireComment(commentId);
-        requireAuthorOrProjectAdmin(comment, current);
+        requireAuthorOrAdmin(comment, current);
         comment.setBody(request.body());
         return CommentDto.from(comment);
     }
@@ -56,7 +55,7 @@ public class CommentService {
     @Transactional
     public void delete(Long commentId, User current) {
         Comment comment = requireComment(commentId);
-        requireAuthorOrProjectAdmin(comment, current);
+        requireAuthorOrAdmin(comment, current);
         commentRepository.delete(comment);
     }
 
@@ -65,11 +64,10 @@ public class CommentService {
                 .orElseThrow(() -> new NotFoundException("Comment " + commentId + " not found"));
     }
 
-    private void requireAuthorOrProjectAdmin(Comment comment, User current) {
-        boolean isAuthor = comment.getAuthor().getId().equals(current.getId());
-        if (!isAuthor && !accessGuard.canAdminister(comment.getTicket().getProject(), current)) {
-            throw new AccessDeniedException("Only the author or a project lead can modify this comment");
-        }
+    /** A comment is its author's to edit or delete, and otherwise only an administrator's. */
+    private void requireAuthorOrAdmin(Comment comment, User current) {
+        accessGuard.requireOwnerOrAdmin(comment.getAuthor(), current,
+                "Only the author or an administrator can modify this comment");
         // The author shortcut skips requireWrite, so the archive check has to be explicit.
         accessGuard.requireActive(comment.getTicket());
     }

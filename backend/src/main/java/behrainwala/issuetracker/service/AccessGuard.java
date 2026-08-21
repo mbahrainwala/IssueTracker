@@ -112,6 +112,21 @@ public class AccessGuard {
         }
     }
 
+    /**
+     * Authored content - a comment, an attachment - belongs to whoever added it, and beyond
+     * them only to a global administrator.
+     * <p>
+     * Deliberately not {@link #canAdminister}: leading a project is not the same as owning
+     * what other people wrote in it, so a project lead cannot remove someone else's comment
+     * or document. Callers supply the message because "the author" and "the uploader" are
+     * different words for the same rule.
+     */
+    public void requireOwnerOrAdmin(User owner, User current, String message) {
+        if (!owner.getId().equals(current.getId()) && !isAdmin(current)) {
+            throw new AccessDeniedException(message);
+        }
+    }
+
     public boolean isProjectLead(Project project, User user) {
         return projectRoleOf(project, user).filter(r -> r == ProjectRole.LEAD).isPresent();
     }

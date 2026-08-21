@@ -471,6 +471,43 @@ label input, label select, label textarea { font-weight: 400; color: var(--text)
 .history-arrow { color: var(--muted); }
 .history-row time { font-size: 12px; white-space: nowrap; }
 
+/* ---------- attachments ---------- */
+.attachments { margin-top: 20px; }
+.attachment-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.attachment-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface-2);
+  font-size: 13px;
+  flex-wrap: wrap;
+}
+.attachment-meta { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.attachment-meta .muted { font-size: 12px; }
+.attachment-name {
+  font-weight: 600;
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+
+/* Keeps the file input reachable by keyboard and screen readers while the styled
+   button in front of it is what people actually see. */
+.visually-hidden {
+  position: absolute;
+  width: 1px; height: 1px;
+  padding: 0; margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Links inside user-written text: wrap long URLs rather than stretching the column. */
+.ticket-description a, .comment-body a { overflow-wrap: anywhere; }
+
 /* ---------- ticket links ---------- */
 .links {
   border-top: 1px solid var(--border);
