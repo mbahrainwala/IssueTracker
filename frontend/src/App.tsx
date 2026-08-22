@@ -1,6 +1,7 @@
 import { Navigate, Route, Routes } from 'react-router-dom'
 import Layout from './components/Layout'
 import { useAuth } from './auth/AuthContext'
+import { MentionsProvider } from './mentions/MentionsContext'
 import AdminBrandingPage from './pages/AdminBrandingPage'
 import AdminTemplatesPage from './pages/AdminTemplatesPage'
 import AdminUsersPage from './pages/AdminUsersPage'
@@ -27,8 +28,11 @@ export default function App() {
   }
 
   return (
-    <Layout>
-      <Routes>
+    // Inside the signed-in branch: outstanding mentions are the caller's own, so there is
+    // nothing to fetch until there is a caller.
+    <MentionsProvider>
+      <Layout>
+        <Routes>
         <Route path="/" element={<Navigate to="/projects" replace />} />
         <Route path="/login" element={<Navigate to="/projects" replace />} />
         <Route path="/projects" element={<ProjectsPage />} />
@@ -66,7 +70,8 @@ export default function App() {
           }
         />
         <Route path="*" element={<div className="card">Page not found.</div>} />
-      </Routes>
-    </Layout>
+        </Routes>
+      </Layout>
+    </MentionsProvider>
   )
 }

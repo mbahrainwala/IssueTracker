@@ -8,6 +8,7 @@ import type {
   LinkType,
   LinkedTicket,
   Member,
+  Mention,
   Page,
   Project,
   ProjectAssignment,
@@ -44,11 +45,47 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * Called when a request with a token comes back 401 — the session has expired or been revoked.
+ *
+ * A module-level hook rather than an import of the auth context, because the dependency only
+ * runs one way: the context knows about the client, and the client must not know about React.
+ * Registered by AuthProvider, which drops the user and sends the app back to the sign-in page.
+ */
+let onSessionExpired: (() => void) | null = null
+
+export function setSessionExpiredHandler(handler: (() => void) | null) {
+  onSessionExpired = handler
+}
+
 export function authHeaders(init: RequestInit = {}): Headers {
   const headers = new Headers(init.headers)
   const token = getToken()
   if (token) headers.set('Authorization', `Bearer ${token}`)
   return headers
+}
+
+/**
+ * `fetch` with the bearer token attached and the session-expiry rule applied.
+ *
+ * Every authorised call goes through here, including the two that cannot use `request()` -
+ * a project image and an attachment download, which want the raw Response to turn into a
+ * blob. Putting the 401 rule at this level rather than in `request()` is what stops those
+ * two from being quiet exceptions to it.
+ *
+ * A 401 *while carrying a token* means the token is no longer good: expired, or the account
+ * disabled. Only when a token was actually sent - a failed sign-in is also a 401, and telling
+ * somebody their session expired when they mistyped a password would be nonsense.
+ */
+export async function authorizedFetch(url: string, init: RequestInit = {}): Promise<Response> {
+  const hadToken = getToken() !== null
+  const response = await fetch(url, { ...init, headers: authHeaders(init) })
+
+  if (response.status === 401 && hadToken) {
+    setToken(null)
+    onSessionExpired?.()
+  }
+  return response
 }
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
@@ -57,7 +94,7 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   // the upload, so only JSON bodies get the header.
   if (init.body && !(init.body instanceof FormData)) headers.set('Content-Type', 'application/json')
 
-  const response = await fetch(`/api${path}`, { ...init, headers })
+  const response = await authorizedFetch(`/api${path}`, { ...init, headers })
 
   if (response.status === 204) return undefined as T
 
@@ -352,6 +389,16 @@ export const api = {
    */
   logoUrl: (version: number | null) => `/api/branding/logo${version ? `?v=${version}` : ''}`,
 
+  // --- mentions (always the caller's own) ---
+  listMentions: () => request<Mention[]>('/mentions'),
+
+  /** Acknowledges every mention on the ticket by leaving a comment; the comment is required. */
+  acknowledgeMentions: (ticketKey: string, body: string) =>
+    request<Comment>(`/tickets/${ticketKey}/mentions/acknowledge`, {
+      method: 'POST',
+      body: JSON.stringify({ body }),
+    }),
+
   // --- attachments ---
   listAttachments: (ticketKey: string) => request<Attachment[]>(`/tickets/${ticketKey}/attachments`),
 
@@ -372,7 +419,7 @@ export const api = {
    * temporary object URL, which is revoked immediately afterwards.
    */
   downloadAttachment: async (attachmentId: number, filename: string) => {
-    const response = await fetch(`/api/attachments/${attachmentId}`, { headers: authHeaders() })
+    const response = await authorizedFetch(`/api/attachments/${attachmentId}`)
     if (!response.ok) {
       const text = await response.text()
       const payload = text ? JSON.parse(text) : null

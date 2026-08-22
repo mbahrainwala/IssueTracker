@@ -174,6 +174,18 @@ export interface Template {
   createdAt: string
 }
 
+/** Somebody named you with @username and is waiting for you to acknowledge it. */
+export interface Mention {
+  id: number
+  ticketKey: string
+  projectKey: string
+  ticketTitle: string
+  mentionedBy: User
+  /** The comment (or description) you were named in, truncated. */
+  excerpt: string | null
+  mentionedAt: string
+}
+
 export interface Branding {
   /** Null when no company name has been set; the app falls back to its own title. */
   companyName: string | null

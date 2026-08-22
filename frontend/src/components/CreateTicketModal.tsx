@@ -106,6 +106,7 @@ export default function CreateTicketModal({
             rows={4}
             value={form.description}
             onChange={(description) => setForm({ ...form, description })}
+            people={people}
           />
         </label>
         <div className="form-row">

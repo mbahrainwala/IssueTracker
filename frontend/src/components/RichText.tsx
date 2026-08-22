@@ -7,6 +7,13 @@ import type { ReactNode } from 'react'
 const URL_PATTERN = /\b(https?:\/\/[^\s<>()[\]]+|www\.[^\s<>()[\]]+)(?<![.,;:!?'"])/i
 
 /**
+ * A mention. Must match the server's pattern (MentionService.MENTION) or the two disagree
+ * about what was written: the chip must not appear for something that raised no mention, and
+ * the "not preceded by a word character" rule is what keeps an email address out of it.
+ */
+const MENTION_PATTERN = /(?<![\w@])@([A-Za-z0-9._-]{3,60})/
+
+/**
  * The inline marks, longest marker first so "**bold**" is never read as an italic "*"
  * wrapping "*bold*". Underline has no established markdown spelling; "__" is free here
  * because bold already has one, and the pairing reads naturally next to it.
@@ -58,8 +65,19 @@ function parse(text: string, keyPrefix: string): ReactNode[] {
       out.push(rest.slice(0, next.index))
     }
     const key = `${keyPrefix}-${consumed + next.index}`
-    // Marked spans recurse so "**bold with *italic* inside**" nests; a URL is atomic.
-    out.push(next.mark ? next.mark.wrap(parse(next.inner, key), key) : link(next.inner, key))
+    // Marked spans recurse so "**bold with *italic* inside**" nests; a URL and a mention are
+    // both atomic - there is nothing inside them to format.
+    if (next.mark) {
+      out.push(next.mark.wrap(parse(next.inner, key), key))
+    } else if (next.kind === 'mention') {
+      out.push(
+        <span key={key} className="mention">
+          {next.inner}
+        </span>,
+      )
+    } else {
+      out.push(link(next.inner, key))
+    }
 
     const step = next.index + next.length
     consumed += step
@@ -73,6 +91,7 @@ interface Match {
   length: number
   inner: string
   mark?: (typeof MARKS)[number]
+  kind?: 'url' | 'mention'
 }
 
 /**
@@ -91,7 +110,12 @@ function earliestMatch(text: string): Match | null {
 
   const url = URL_PATTERN.exec(text)
   if (url && (best === null || url.index < best.index)) {
-    best = { index: url.index, length: url[0].length, inner: url[0] }
+    best = { index: url.index, length: url[0].length, inner: url[0], kind: 'url' }
+  }
+
+  const mention = MENTION_PATTERN.exec(text)
+  if (mention && (best === null || mention.index < best.index)) {
+    best = { index: mention.index, length: mention[0].length, inner: mention[0], kind: 'mention' }
   }
   return best
 }

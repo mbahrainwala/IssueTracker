@@ -34,6 +34,7 @@ public class TicketService {
     private final ProjectRepository projectRepository;
     private final TicketStatusChangeRepository statusChangeRepository;
     private final WorkflowService workflow;
+    private final MentionService mentions;
     private final AttachmentRepository attachmentRepository;
     private final AttachmentStorage attachmentStorage;
     private final ProjectService projectService;
@@ -44,6 +45,7 @@ public class TicketService {
                          ProjectRepository projectRepository,
                          TicketStatusChangeRepository statusChangeRepository,
                          WorkflowService workflow,
+                         MentionService mentions,
                          AttachmentRepository attachmentRepository,
                          AttachmentStorage attachmentStorage,
                          ProjectService projectService,
@@ -53,6 +55,7 @@ public class TicketService {
         this.projectRepository = projectRepository;
         this.statusChangeRepository = statusChangeRepository;
         this.workflow = workflow;
+        this.mentions = mentions;
         this.attachmentRepository = attachmentRepository;
         this.attachmentStorage = attachmentStorage;
         this.projectService = projectService;
@@ -193,7 +196,10 @@ public class TicketService {
         if (request.epicKey() != null && !request.epicKey().isBlank()) {
             ticket.setEpic(resolveEpic(request.epicKey(), ticket));
         }
-        return TicketDto.from(ticketRepository.save(ticket));
+        Ticket saved = ticketRepository.saveAndFlush(ticket);
+        // A description can name people too, not just comments.
+        mentions.record(saved, saved.getDescription(), current, null);
+        return TicketDto.from(saved);
     }
 
     /**
@@ -300,6 +306,7 @@ public class TicketService {
         }
         if (request.description() != null) {
             ticket.setDescription(request.description());
+            mentions.record(ticket, ticket.getDescription(), current, null);
         }
         if (request.type() != null) {
             // Turning a ticket into an epic drops its own parent, since epics cannot nest.

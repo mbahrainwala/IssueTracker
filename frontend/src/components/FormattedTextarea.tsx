@@ -1,4 +1,21 @@
-import { useRef, type KeyboardEvent, type TextareaHTMLAttributes } from 'react'
+import { useRef, useState, type KeyboardEvent, type TextareaHTMLAttributes } from 'react'
+
+/** Just enough of a user to offer and to insert. */
+export interface MentionCandidate {
+  id: number
+  username: string
+  displayName: string
+}
+
+/**
+ * The half-typed mention immediately before the caret: "@" plus whatever has been typed since,
+ * which may be nothing. Anchored to the end of the text-so-far, and refusing a preceding word
+ * character for the same reason the renderer does - an email address is not a mention.
+ */
+export const MENTION_TOKEN = /(?:^|[^\w@])@([A-Za-z0-9._-]*)$/
+
+/** Enough names to choose from without covering the field being typed into. */
+const MAX_SUGGESTIONS = 6
 
 /**
  * The three marks, with the shortcut each answers to. A mark is a run of {@code width}
@@ -45,6 +62,12 @@ function runAfter(text: string, index: number, char: string): number {
 type Props = Omit<TextareaHTMLAttributes<HTMLTextAreaElement>, 'value' | 'onChange'> & {
   value: string
   onChange: (value: string) => void
+  /**
+   * People who can be offered after an "@". Passed in rather than fetched here: every caller
+   * already has the project's members loaded, and mentioning someone who cannot see the
+   * project does nothing, so the members list is exactly the right set to suggest.
+   */
+  people?: MentionCandidate[]
 }
 
 /**
@@ -56,8 +79,53 @@ type Props = Omit<TextareaHTMLAttributes<HTMLTextAreaElement>, 'value' | 'onChan
  * is stored and re-rendered, so what is typed, what is saved and what is displayed cannot
  * drift apart, and no HTML is ever produced that would then need sanitising.
  */
-export default function FormattedTextarea({ value, onChange, ...props }: Props) {
+export default function FormattedTextarea({ value, onChange, people = [], ...props }: Props) {
   const ref = useRef<HTMLTextAreaElement>(null)
+
+  /** The "@..." being typed, or null when the caret is not in one. */
+  const [mentionQuery, setMentionQuery] = useState<string | null>(null)
+  const [highlighted, setHighlighted] = useState(0)
+
+  const suggestions =
+    mentionQuery === null
+      ? []
+      : people
+          .filter((person) => {
+            const q = mentionQuery.toLowerCase()
+            return (
+              q === ''
+              || person.username.toLowerCase().includes(q)
+              || person.displayName.toLowerCase().includes(q)
+            )
+          })
+          .slice(0, MAX_SUGGESTIONS)
+
+  /** Recomputed whenever the text or the caret moves, since either can enter or leave a token. */
+  function syncMentionQuery(el: HTMLTextAreaElement) {
+    const upToCaret = el.value.slice(0, el.selectionStart)
+    const match = MENTION_TOKEN.exec(upToCaret)
+    setMentionQuery(match ? match[1]! : null)
+    setHighlighted(0)
+  }
+
+  /** Replaces the half-typed "@..." with the chosen name, and leaves a trailing space. */
+  function insertMention(person: MentionCandidate) {
+    const el = ref.current
+    if (el === null || mentionQuery === null) return
+
+    const caret = el.selectionStart
+    const tokenStart = caret - mentionQuery.length - 1
+    const inserted = `@${person.username} `
+    const next = value.slice(0, tokenStart) + inserted + value.slice(caret)
+
+    onChange(next)
+    setMentionQuery(null)
+    const caretAfter = tokenStart + inserted.length
+    requestAnimationFrame(() => {
+      el.focus()
+      el.setSelectionRange(caretAfter, caretAfter)
+    })
+  }
 
   /**
    * Turns one mark on or off around the selection, leaving any other mark on the same text
@@ -121,6 +189,31 @@ export default function FormattedTextarea({ value, onChange, ...props }: Props) 
   }
 
   function onKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
+    // The picker takes these keys only while it is open, so Enter still makes a newline and
+    // Tab still moves on whenever nobody is choosing a name.
+    if (suggestions.length > 0) {
+      if (event.key === 'ArrowDown') {
+        event.preventDefault()
+        setHighlighted((i) => (i + 1) % suggestions.length)
+        return
+      }
+      if (event.key === 'ArrowUp') {
+        event.preventDefault()
+        setHighlighted((i) => (i - 1 + suggestions.length) % suggestions.length)
+        return
+      }
+      if (event.key === 'Enter' || event.key === 'Tab') {
+        event.preventDefault()
+        insertMention(suggestions[highlighted] ?? suggestions[0]!)
+        return
+      }
+      if (event.key === 'Escape') {
+        event.preventDefault()
+        setMentionQuery(null)
+        return
+      }
+    }
+
     if (!event.ctrlKey && !event.metaKey) return
     const control = CONTROLS.find((c) => c.key === event.key.toLowerCase())
     if (!control) return
@@ -148,13 +241,44 @@ export default function FormattedTextarea({ value, onChange, ...props }: Props) 
           </button>
         ))}
       </div>
-      <textarea
-        {...props}
-        ref={ref}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        onKeyDown={onKeyDown}
-      />
+      <div className="mention-anchor">
+        <textarea
+          {...props}
+          ref={ref}
+          value={value}
+          onChange={(e) => {
+            onChange(e.target.value)
+            syncMentionQuery(e.target)
+          }}
+          // The caret can move without the text changing, which enters or leaves a token.
+          onKeyUp={(e) => syncMentionQuery(e.currentTarget)}
+          onClick={(e) => syncMentionQuery(e.currentTarget)}
+          // Left open, the list would hang over whatever is clicked next.
+          onBlur={() => setMentionQuery(null)}
+          onKeyDown={onKeyDown}
+        />
+        {suggestions.length > 0 && (
+          <ul className="mention-suggestions" role="listbox">
+            {suggestions.map((person, index) => (
+              <li key={person.id}>
+                <button
+                  type="button"
+                  role="option"
+                  aria-selected={index === highlighted}
+                  className={index === highlighted ? 'mention-option mention-option-on' : 'mention-option'}
+                  // Blur would close the list before the click landed.
+                  onMouseDown={(e) => e.preventDefault()}
+                  onMouseEnter={() => setHighlighted(index)}
+                  onClick={() => insertMention(person)}
+                >
+                  <strong>@{person.username}</strong>
+                  <span className="muted">{person.displayName}</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
     </div>
   )
 }

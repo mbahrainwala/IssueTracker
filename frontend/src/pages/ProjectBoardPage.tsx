@@ -8,6 +8,7 @@ import AuthImage from '../components/AuthImage'
 import CreateTicketModal from '../components/CreateTicketModal'
 import RichText from '../components/RichText'
 import { formatDateTime } from '../format'
+import { useMentions } from '../mentions/MentionsContext'
 import { PriorityBadge, TypeBadge } from '../components/Badges'
 
 type View = 'board' | 'list' | 'archived'
@@ -25,6 +26,8 @@ export default function ProjectBoardPage() {
   const [creating, setCreating] = useState(false)
 
   const archivedView = view === 'archived'
+  // Which of these tickets are waiting on me; shared with every other view of the app.
+  const { flagged } = useMentions()
 
   const loadTickets = useCallback(async () => {
     try {
@@ -187,12 +190,13 @@ export default function ProjectBoardPage() {
               key={lane.id}
               status={lane.name}
               tickets={byStatus.get(lane.name) ?? []}
+              flagged={flagged}
               onDropTicket={(ticketKey) => moveTicket(ticketKey, lane.name)}
             />
           ))}
         </div>
       )}
-      {view === 'list' && <TicketTable tickets={tickets} />}
+      {view === 'list' && <TicketTable tickets={tickets} flagged={flagged} />}
       {archivedView && <ArchivedTable tickets={tickets} onRestore={restore} />}
 
       {creating && (
@@ -214,10 +218,13 @@ export default function ProjectBoardPage() {
 function BoardColumn({
   status,
   tickets,
+  flagged,
   onDropTicket,
 }: {
   status: TicketStatus
   tickets: Ticket[]
+  /** Ticket keys with an unacknowledged mention of the viewer. */
+  flagged: Set<string>
   onDropTicket: (ticketKey: string) => void
 }) {
   const [over, setOver] = useState(false)
@@ -245,11 +252,16 @@ function BoardColumn({
         {tickets.map((ticket) => (
           <article
             key={ticket.id}
-            className="ticket-card"
+            className={flagged.has(ticket.ticketKey) ? 'ticket-card ticket-card-mentioned' : 'ticket-card'}
             draggable
             onDragStart={(e) => e.dataTransfer.setData('text/ticket-key', ticket.ticketKey)}
           >
             <Link to={`/tickets/${ticket.ticketKey}`} className="ticket-title">
+              {flagged.has(ticket.ticketKey) && (
+                <span className="mention-flag" title="You were mentioned - open it to acknowledge">
+                  @you
+                </span>
+              )}
               {ticket.title}
             </Link>
             {ticket.epic && (
@@ -333,7 +345,7 @@ function ArchivedTable({
   )
 }
 
-function TicketTable({ tickets }: { tickets: Ticket[] }) {
+function TicketTable({ tickets, flagged }: { tickets: Ticket[]; flagged: Set<string> }) {
   if (tickets.length === 0) return <p className="muted">No tickets match these filters.</p>
   return (
     <div className="card table-wrap">
@@ -350,7 +362,7 @@ function TicketTable({ tickets }: { tickets: Ticket[] }) {
         </thead>
         <tbody>
           {tickets.map((ticket) => (
-            <tr key={ticket.id}>
+            <tr key={ticket.id} className={flagged.has(ticket.ticketKey) ? 'row-mentioned' : undefined}>
               <td>
                 <Link to={`/tickets/${ticket.ticketKey}`} className="ticket-key">
                   {ticket.ticketKey}
@@ -358,6 +370,11 @@ function TicketTable({ tickets }: { tickets: Ticket[] }) {
               </td>
               <td><TypeBadge type={ticket.type} /></td>
               <td>
+                {flagged.has(ticket.ticketKey) && (
+                  <span className="mention-flag" title="You were mentioned - open it to acknowledge">
+                    @you
+                  </span>
+                )}
                 <Link to={`/tickets/${ticket.ticketKey}`}>{ticket.title}</Link>
               </td>
               <td><span className="status-pill">{ticket.status}</span></td>

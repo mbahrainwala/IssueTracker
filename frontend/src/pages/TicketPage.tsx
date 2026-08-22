@@ -13,6 +13,7 @@ import StatusHistory from '../components/StatusHistory'
 import TicketLinks from '../components/TicketLinks'
 import { useAuth } from '../auth/AuthContext'
 import { formatDateTime } from '../format'
+import { useMentions } from '../mentions/MentionsContext'
 
 export default function TicketPage() {
   const { ticketKey = '' } = useParams()
@@ -36,6 +37,26 @@ export default function TicketPage() {
   const [draftTitle, setDraftTitle] = useState('')
   const [draftDescription, setDraftDescription] = useState('')
   const [newComment, setNewComment] = useState('')
+
+  const { mentions, refresh: refreshMentions } = useMentions()
+  /** Everything on this ticket still waiting on me. */
+  const outstanding = mentions.filter((m) => m.ticketKey.toUpperCase() === ticketKey.toUpperCase())
+  const [acknowledgement, setAcknowledgement] = useState('')
+
+  async function acknowledge(e: React.FormEvent) {
+    e.preventDefault()
+    if (!acknowledgement.trim()) return
+    try {
+      const created = await api.acknowledgeMentions(ticketKey, acknowledgement.trim())
+      // The acknowledgement is a comment, so it lands in the thread like any other.
+      setComments((prev) => [...prev, created])
+      setAcknowledgement('')
+      await refreshMentions()
+      setError(null)
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not acknowledge')
+    }
+  }
 
   useEffect(() => {
     let cancelled = false
@@ -140,6 +161,8 @@ export default function TicketPage() {
   if (!ticket) return <p className="error">{error ?? 'Ticket not found'}</p>
 
   const doneLane = lanes.find((lane) => lane.done)?.name ?? null
+  // Who "@" can offer: the project's members, which is exactly who a mention would reach.
+  const people = members.map((m) => m.user)
 
   return (
     <div className="page">
@@ -189,6 +212,47 @@ export default function TicketPage() {
             )}
           </div>
 
+          {outstanding.length > 0 && (
+            <section className="notice mention-banner">
+              <h2>
+                {outstanding.length === 1
+                  ? `${outstanding[0]!.mentionedBy.displayName} mentioned you`
+                  : `You were mentioned ${outstanding.length} times`}
+              </h2>
+              {outstanding.map((mention) => (
+                <p key={mention.id} className="mention-excerpt">
+                  <strong>{mention.mentionedBy.displayName}</strong>{' '}
+                  <span className="muted">{formatDateTime(mention.mentionedAt)}</span>
+                  {mention.excerpt && (
+                    <>
+                      <br />
+                      <RichText text={mention.excerpt} />
+                    </>
+                  )}
+                </p>
+              ))}
+              {ticket.archived ? (
+                <p className="muted">
+                  This ticket is archived, so it cannot be commented on. Restore it to
+                  acknowledge.
+                </p>
+              ) : (
+                <form className="comment-form" onSubmit={acknowledge}>
+                  <FormattedTextarea
+                    rows={2}
+                    placeholder="Reply to acknowledge — a comment is required, so whoever asked can see you have read it."
+                    value={acknowledgement}
+                    onChange={setAcknowledgement}
+                    people={people}
+                  />
+                  <button className="btn btn-primary" disabled={!acknowledgement.trim()}>
+                    Acknowledge
+                  </button>
+                </form>
+              )}
+            </section>
+          )}
+
           {ticket.archived && (
             <p className="notice archived-banner">
               Archived{ticket.archivedAt ? ` on ${formatDateTime(ticket.archivedAt)}` : ''}
@@ -205,7 +269,12 @@ export default function TicketPage() {
               </label>
               <label>
                 Description
-                <FormattedTextarea rows={8} value={draftDescription} onChange={setDraftDescription} />
+                <FormattedTextarea
+                  rows={8}
+                  value={draftDescription}
+                  onChange={setDraftDescription}
+                  people={people}
+                />
               </label>
               <div className="form-actions">
                 <button
@@ -286,9 +355,10 @@ export default function TicketPage() {
               <form className="comment-form" onSubmit={postComment}>
                 <FormattedTextarea
                   rows={3}
-                  placeholder="Leave a comment…"
+                  placeholder="Leave a comment…  Type @ to mention somebody."
                   value={newComment}
                   onChange={setNewComment}
+                  people={people}
                 />
                 <button className="btn btn-primary" disabled={!newComment.trim()}>
                   Comment

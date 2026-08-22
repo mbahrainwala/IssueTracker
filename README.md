@@ -173,6 +173,7 @@ An archived ticket, and everything inside an archived project, refuses content c
 | Edit or move the ticket               | `409`  |
 | Create a ticket in the project        | `409`  |
 | Add a comment                         | `409`  |
+| Acknowledge an @mention               | `409`  |
 | Edit or delete **your own** comment   | `409`  |
 | Attach or remove **your own** document | `409` |
 | Add or remove a ticket link           | `409`  |
@@ -626,6 +627,60 @@ stays multiplication rather than becoming an italic ` 3 `. An unclosed `**` is s
 > elements and **never** hands a string to the DOM as HTML, so there is no sanitiser to get
 > right and no stored-XSS surface. Accepting HTML would have created both.
 
+## Mentioning people
+
+Writing **`@username`** in a comment or a ticket description flags that ticket for the person
+named. It stays flagged for them — highlighted on the board and in the list view, with a banner
+on the ticket — **until they open it and acknowledge it**.
+
+**Acknowledging requires a comment.** There is no dismiss button. The point is that "yes, I have
+seen this" is visible to whoever asked, on the ticket, where the rest of the conversation is; a
+silent dismissal would tell them nothing. Posting the comment and clearing the flag are one
+operation, so the two cannot come apart.
+
+| | |
+|---|---|
+| `GET /api/mentions` | what is waiting for **me** — never anyone else's |
+| `POST /api/tickets/{key}/mentions/acknowledge` | post the comment and clear my flags on that ticket |
+
+Acknowledging clears **everything** outstanding for you on that ticket at once. What you are
+acknowledging is the ticket — "I have read this and replied" — not comment #47 individually.
+And because an acknowledgement is an ordinary comment, it can name somebody in turn: replying
+*"Done — @alice please check"* clears yours and raises hers.
+
+### Finding people
+
+Typing **`@`** in a comment or description opens a picker of the project's members, filtered as
+you keep typing against both username and display name. `↑`/`↓` move, `Enter` or `Tab` chooses,
+`Escape` dismisses — and those keys are only intercepted while the picker is open, so `Enter`
+still makes a newline the rest of the time.
+
+The candidates are the **project's members**, because that is exactly who a mention can reach —
+naming somebody who cannot see the project does nothing. The list comes from the members each
+page has already loaded, so opening the picker costs no request.
+
+> A global `ADMIN` who is not a member of the project can still be mentioned by typing the name
+> out; they are simply not suggested, since they are not on the member list.
+
+### What does not raise a mention
+
+Three cases are skipped silently rather than failing the comment, because people write prose,
+not markup:
+
+- **A name that is not a user.** `@here`, `@everyone`, a typo.
+- **Somebody who cannot see the project.** The flag would point at a ticket they would be
+  refused, which is worse than not being told at all.
+- **Naming yourself.** Nobody needs to acknowledge their own note.
+
+An **email address is not a mention**: `mail bob@example.com` does not ping `bob`, because a
+mention must not be preceded by a word character. The client and server share that rule
+deliberately — the chip in the rendered text must appear exactly when a mention was raised, or
+the UI is lying about what happened.
+
+> **Archived tickets cannot be acknowledged**, because acknowledging writes a comment and an
+> archived ticket takes none (`409`). The mention stays outstanding rather than being silently
+> dropped — restore the ticket to clear it.
+
 ## Links in descriptions and comments
 
 URLs typed into a ticket description, a project description or a comment are turned into
@@ -812,6 +867,8 @@ All routes require `Authorization: Bearer <token>` except `/api/auth/register` a
 | `POST`   | `/api/tickets/{ticketKey}/comments`     | Add a comment                    |
 | `PUT`    | `/api/comments/{id}`                    | Edit a comment                   |
 | `DELETE` | `/api/comments/{id}`                    | Delete a comment                 |
+| `GET`    | `/api/mentions`                         | @mentions waiting for **me**     |
+| `POST`   | `/api/tickets/{ticketKey}/mentions/acknowledge` | Acknowledge with a comment |
 | `GET`    | `/api/tickets/{ticketKey}/attachments`  | List attached documents          |
 | `POST`   | `/api/tickets/{ticketKey}/attachments`  | Attach a document (multipart `file`) |
 | `GET`    | `/api/attachments/{id}`                 | Download one (forced `attachment`) |
@@ -837,7 +894,8 @@ stability guarantee, and logs a warning on every paged request.
   transitions that update optimistically and roll back if the server rejects the move. Toggle to
   a table view or the **Archived** tab; filter by assignee or search by title/key.
 - **Ticket** — inline title/description editing, status/type/priority/assignee/epic/points/due
-  date in the sidebar, status history, linked tickets, and threaded comments.
+  date in the sidebar, status history, linked tickets, attachments, and threaded comments. A
+  banner appears when you have been [@mentioned](#mentioning-people) and have not replied.
 - **Settings** — project details, the **board** (rename, reorder, add and remove lanes),
   the project image, membership and roles, and project deletion.
 - **Users** (admins only, in the top nav) — the admin dashboard: create accounts, edit

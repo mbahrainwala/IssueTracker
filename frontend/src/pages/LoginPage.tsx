@@ -4,7 +4,7 @@ import { useAuth } from '../auth/AuthContext'
 import BrandMark, { BrandName } from '../components/BrandMark'
 
 export default function LoginPage() {
-  const { login, register } = useAuth()
+  const { login, register, sessionExpired } = useAuth()
   const [mode, setMode] = useState<'login' | 'register'>('login')
   const [form, setForm] = useState({
     usernameOrEmail: '',
@@ -50,6 +50,12 @@ export default function LoginPage() {
             <BrandName />
           </h1>
         </div>
+
+        {/* Arriving here because the token was refused, rather than by signing out. Without
+            this the redirect looks like the app simply forgot them. */}
+        {sessionExpired && (
+          <p className="notice">Your session expired. Please sign in again.</p>
+        )}
 
         <div className="tabs">
           <button

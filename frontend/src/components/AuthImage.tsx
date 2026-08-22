@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { authHeaders } from '../api/client'
+import { authorizedFetch } from '../api/client'
 
 /**
  * An image behind an authorised endpoint.
@@ -10,7 +10,8 @@ import { authHeaders } from '../api/client'
  * long list of tiles does not leak one blob per card.
  *
  * Renders nothing at all if the fetch fails: a missing picture is decoration, never an error
- * worth showing in the middle of a project tile.
+ * worth showing in the middle of a project tile. It still goes through authorizedFetch, so a
+ * picture refused because the session expired ends the session like any other call would.
  */
 export default function AuthImage({
   url,
@@ -27,7 +28,7 @@ export default function AuthImage({
     let revoked = false
     let created: string | null = null
 
-    fetch(url, { headers: authHeaders() })
+    authorizedFetch(url)
       .then((response) => (response.ok ? response.blob() : Promise.reject(response.status)))
       .then((blob) => {
         if (revoked) return

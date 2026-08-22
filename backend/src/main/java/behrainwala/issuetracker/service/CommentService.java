@@ -5,7 +5,9 @@ import behrainwala.issuetracker.domain.Ticket;
 import behrainwala.issuetracker.domain.User;
 import behrainwala.issuetracker.dto.CommentDtos.CommentDto;
 import behrainwala.issuetracker.dto.CommentDtos.CommentRequest;
+import behrainwala.issuetracker.dto.MentionDtos.AcknowledgeRequest;
 import behrainwala.issuetracker.repo.CommentRepository;
+import behrainwala.issuetracker.web.ConflictException;
 import behrainwala.issuetracker.web.NotFoundException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -19,13 +21,16 @@ public class CommentService {
     private final CommentRepository commentRepository;
     private final TicketService ticketService;
     private final AccessGuard accessGuard;
+    private final MentionService mentions;
 
     public CommentService(CommentRepository commentRepository,
                           TicketService ticketService,
-                          AccessGuard accessGuard) {
+                          AccessGuard accessGuard,
+                          MentionService mentions) {
         this.commentRepository = commentRepository;
         this.ticketService = ticketService;
         this.accessGuard = accessGuard;
+        this.mentions = mentions;
     }
 
     public List<CommentDto> list(String ticketKey, User current) {
@@ -40,8 +45,10 @@ public class CommentService {
     public CommentDto add(String ticketKey, CommentRequest request, User current) {
         Ticket ticket = ticketService.requireByKey(ticketKey);
         accessGuard.requireWrite(ticket, current);
-        Comment comment = new Comment(ticket, current, request.body());
-        return CommentDto.from(commentRepository.save(comment));
+        Comment saved = commentRepository.saveAndFlush(new Comment(ticket, current, request.body()));
+        // Flushed first so the mention can point at the comment that raised it.
+        mentions.record(ticket, saved.getBody(), current, saved);
+        return CommentDto.from(saved);
     }
 
     @Transactional
@@ -49,7 +56,32 @@ public class CommentService {
         Comment comment = requireComment(commentId);
         requireAuthorOrAdmin(comment, current);
         comment.setBody(request.body());
+        // An edit can name somebody who was not named before; already-outstanding mentions
+        // from this same comment are not raised twice.
+        mentions.record(comment.getTicket(), comment.getBody(), current, comment);
         return CommentDto.from(comment);
+    }
+
+    /**
+     * Acknowledges every mention outstanding for this person on the ticket, by posting the
+     * comment they wrote. One operation rather than "post a comment, then dismiss": the
+     * comment is the acknowledgement, so the two cannot come apart.
+     */
+    @Transactional
+    public CommentDto acknowledgeMentions(String ticketKey, AcknowledgeRequest request, User current) {
+        Ticket ticket = ticketService.requireByKey(ticketKey);
+        accessGuard.requireWrite(ticket, current);
+
+        if (mentions.outstandingOn(ticket, current).isEmpty()) {
+            throw new ConflictException(
+                    "You have nothing to acknowledge on " + ticket.getTicketKey());
+        }
+
+        Comment saved = commentRepository.saveAndFlush(new Comment(ticket, current, request.body()));
+        mentions.acknowledge(ticket, current, saved);
+        // An acknowledgement can name somebody in turn - replying "@alice done" is normal.
+        mentions.record(ticket, saved.getBody(), current, saved);
+        return CommentDto.from(saved);
     }
 
     @Transactional

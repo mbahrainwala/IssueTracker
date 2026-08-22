@@ -524,6 +524,75 @@ label input, label select, label textarea { font-weight: 400; color: var(--text)
 }
 .logo-preview img { max-width: 100%; max-height: 72px; object-fit: contain; }
 
+/* ---------- @mentions ---------- */
+/* The picker floats over whatever follows the field, so the layout does not jump as you type. */
+.mention-anchor { position: relative; display: flex; flex-direction: column; }
+.mention-suggestions {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  z-index: 20;
+  margin: 2px 0 0;
+  padding: 4px;
+  list-style: none;
+  max-height: 190px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  box-shadow: 0 8px 24px rgba(9, 30, 66, 0.18);
+}
+.mention-option {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  width: 100%;
+  padding: 5px 8px;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  color: var(--text);
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+.mention-option-on { background: color-mix(in srgb, var(--primary) 14%, transparent); }
+.mention-option .muted { font-size: 12px; }
+
+
+/* A name in the text. Marked, not linked: it identifies a person, it does not navigate. */
+.mention {
+  padding: 0 3px;
+  border-radius: 3px;
+  font-weight: 600;
+  color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 12%, transparent);
+}
+
+/* A ticket waiting on you. The left edge carries it, so a board full of cards still reads
+   as a board rather than as a wall of highlights. */
+.ticket-card-mentioned {
+  border-left: 3px solid var(--primary);
+  background: color-mix(in srgb, var(--primary) 6%, var(--surface));
+}
+.row-mentioned { background: color-mix(in srgb, var(--primary) 6%, transparent); }
+.mention-flag {
+  display: inline-block;
+  margin-right: 6px;
+  padding: 0 5px;
+  border-radius: 3px;
+  background: var(--primary);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  vertical-align: 1px;
+}
+.mention-banner { border-left: 3px solid var(--primary); }
+.mention-banner h2 { margin: 0 0 6px; font-size: 15px; }
+.mention-excerpt { margin: 0 0 8px; font-size: 13px; }
+
 /* ---------- templates and lanes ---------- */
 .template-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 16px; }
 .template-card { display: flex; flex-direction: column; gap: 8px; }
