@@ -17,3 +17,6 @@ app:
     # No background sweeping during tests - the sweep is called directly instead.
     sweep-cron: "-"
     orphan-grace: 0s
+  branding:
+    # A sibling of the attachment directory, never inside it.
+    directory: ${java.io.tmpdir}/issuetracker-test-branding

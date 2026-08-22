@@ -6,8 +6,6 @@ import org.slf4j.LoggerFactory;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.core.io.Resource;
 import org.springframework.stereotype.Component;
-import org.springframework.transaction.support.TransactionSynchronization;
-import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
@@ -117,16 +115,7 @@ public class AttachmentStorage {
             return;
         }
         List<String> keys = List.copyOf(storageKeys);
-        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
-            keys.forEach(this::delete);
-            return;
-        }
-        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
-            @Override
-            public void afterCommit() {
-                keys.forEach(AttachmentStorage.this::delete);
-            }
-        });
+        AfterCommit.run(() -> keys.forEach(this::delete));
     }
 
     /**

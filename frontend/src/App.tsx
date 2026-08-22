@@ -1,6 +1,7 @@
 import { Navigate, Route, Routes } from 'react-router-dom'
 import Layout from './components/Layout'
 import { useAuth } from './auth/AuthContext'
+import AdminBrandingPage from './pages/AdminBrandingPage'
 import AdminUsersPage from './pages/AdminUsersPage'
 import LoginPage from './pages/LoginPage'
 import ProjectsPage from './pages/ProjectsPage'
@@ -38,6 +39,16 @@ export default function App() {
           element={
             user.role === 'ADMIN' ? (
               <AdminUsersPage />
+            ) : (
+              <div className="card">You need administrator access to view this page.</div>
+            )
+          }
+        />
+        <Route
+          path="/admin/branding"
+          element={
+            user.role === 'ADMIN' ? (
+              <AdminBrandingPage />
             ) : (
               <div className="card">You need administrator access to view this page.</div>
             )

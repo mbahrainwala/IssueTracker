@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { ApiError } from '../api/client'
 import { useAuth } from '../auth/AuthContext'
-import BrandMark from '../components/BrandMark'
+import BrandMark, { BrandName } from '../components/BrandMark'
 
 export default function LoginPage() {
   const { login, register } = useAuth()
@@ -46,7 +46,9 @@ export default function LoginPage() {
       <form className="card auth-card" onSubmit={submit}>
         <div className="auth-brand">
           <BrandMark size={32} />
-          <h1>Issue Tracker</h1>
+          <h1>
+            <BrandName />
+          </h1>
         </div>
 
         <div className="tabs">

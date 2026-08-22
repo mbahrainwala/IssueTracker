@@ -508,6 +508,22 @@ label input, label select, label textarea { font-weight: 400; color: var(--text)
 /* Links inside user-written text: wrap long URLs rather than stretching the column. */
 .ticket-description a, .comment-body a { overflow-wrap: anywhere; }
 
+/* ---------- branding ---------- */
+/* A logo is any shape the company hands us, so constrain it rather than trusting it. */
+.brand-logo { max-width: 160px; object-fit: contain; display: block; }
+.logo-preview {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 96px;
+  padding: 12px;
+  margin-bottom: 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface-2);
+}
+.logo-preview img { max-width: 100%; max-height: 72px; object-fit: contain; }
+
 /* ---------- inline formatting ---------- */
 /* The wrapper is what the surrounding layout now sees, so it has to fill the space the bare
    textarea used to - .comment-form aligns its children to the right, and an unstretched

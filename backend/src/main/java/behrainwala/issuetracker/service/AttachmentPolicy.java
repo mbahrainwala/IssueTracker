@@ -129,8 +129,12 @@ public class AttachmentPolicy {
         return contentType;
     }
 
-    /** Reads the magic bytes regardless of what the file is called. */
-    private void rejectExecutableContent(byte[] head) {
+    /**
+     * Reads the magic bytes regardless of what the file is called. Public because it is plain
+     * upload hygiene rather than anything attachment-specific - the branding logo is screened
+     * with the same check.
+     */
+    public void rejectExecutableContent(byte[] head) {
         for (Map.Entry<String, byte[]> entry : EXECUTABLE_MAGIC.entrySet()) {
             if (startsWith(head, entry.getValue())) {
                 throw new IllegalArgumentException(

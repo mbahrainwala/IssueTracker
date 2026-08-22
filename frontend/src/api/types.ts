@@ -134,6 +134,14 @@ export interface StatusChange {
   summary: string
 }
 
+export interface Branding {
+  /** Null when no company name has been set; the app falls back to its own title. */
+  companyName: string | null
+  hasLogo: boolean
+  /** Last-updated stamp, appended to the logo URL so a replacement is not served from cache. */
+  logoVersion: number | null
+}
+
 export interface Attachment {
   id: number
   filename: string

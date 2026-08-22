@@ -3,6 +3,7 @@ package behrainwala.issuetracker;
 import behrainwala.issuetracker.config.AppProperties;
 import behrainwala.issuetracker.repo.AttachmentRepository;
 import behrainwala.issuetracker.service.AttachmentStorage;
+import behrainwala.issuetracker.service.BrandingLogoStore;
 import behrainwala.issuetracker.service.OrphanedAttachmentSweeper;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
@@ -60,6 +61,9 @@ class OrphanedAttachmentSweepTest {
 
     @Autowired
     private AppProperties properties;
+
+    @Autowired
+    private BrandingLogoStore logoStore;
 
     private static String token;
     private static String ticketKey;
@@ -160,5 +164,23 @@ class OrphanedAttachmentSweepTest {
     @Test
     void sweepingAnAlreadyCleanStoreDoesNothing() throws Exception {
         assertThat(sweeper.sweep()).isZero();
+    }
+
+    /**
+     * The logo is a file no attachment row will ever point at, which is exactly what the sweep
+     * deletes. It survives only because it lives in a different directory - so that is what is
+     * asserted here rather than left to the configuration to get right quietly.
+     */
+    @Test
+    void theBrandingLogoIsNotSwept() throws Exception {
+        logoStore.write("a logo, not an attachment".getBytes(StandardCharsets.UTF_8));
+        assertThat(logoStore.exists()).isTrue();
+
+        String strayKey = orphan();
+        age(strayKey, 24);
+
+        assertThat(sweeper.sweep()).isEqualTo(1);
+        assertThat(storage.exists(strayKey)).isFalse();
+        assertThat(logoStore.exists()).isTrue();
     }
 }

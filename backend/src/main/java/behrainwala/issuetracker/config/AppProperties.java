@@ -11,6 +11,11 @@ public class AppProperties {
     private final Jwt jwt = new Jwt();
     private final Cors cors = new Cors();
     private final Attachments attachments = new Attachments();
+    private final Branding branding = new Branding();
+
+    public Branding getBranding() {
+        return branding;
+    }
 
     public Jwt getJwt() {
         return jwt;
@@ -119,6 +124,32 @@ public class AppProperties {
 
         public void setOrphanGrace(Duration orphanGrace) {
             this.orphanGrace = orphanGrace;
+        }
+    }
+
+    /**
+     * Company name and logo in the title bar. The logo is a file on disk, and its directory
+     * must sit outside {@link Attachments#getDirectory()} - the nightly orphan sweep deletes
+     * anything in there that no attachment row claims, and the logo never will.
+     */
+    public static class Branding {
+        private String directory = "data/branding";
+        private long maxLogoBytes = 512L * 1024;
+
+        public String getDirectory() {
+            return directory;
+        }
+
+        public void setDirectory(String directory) {
+            this.directory = directory;
+        }
+
+        public long getMaxLogoBytes() {
+            return maxLogoBytes;
+        }
+
+        public void setMaxLogoBytes(long maxLogoBytes) {
+            this.maxLogoBytes = maxLogoBytes;
         }
     }
 }

@@ -47,6 +47,10 @@ public class SecurityConfig {
                         // Only these two are anonymous. /api/auth/me and /api/auth/change-password
                         // must stay authenticated, so no wildcard here.
                         .requestMatchers("/api/auth/register", "/api/auth/login").permitAll()
+                        // The login page wears the company branding, so reading it cannot
+                        // require a session. Writing it is guarded by @PreAuthorize on the
+                        // controller, which is why only GET is opened here.
+                        .requestMatchers(HttpMethod.GET, "/api/branding", "/api/branding/logo").permitAll()
                         .requestMatchers("/h2-console/**", "/actuator/health").permitAll()
                         .requestMatchers("/api/**").authenticated()
                         // Everything else is the static SPA shell, which carries no data of its own.

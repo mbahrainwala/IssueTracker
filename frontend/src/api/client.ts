@@ -1,6 +1,7 @@
 import type {
   Attachment,
   AuthResponse,
+  Branding,
   Comment,
   EpicRef,
   LinkType,
@@ -264,6 +265,26 @@ export const api = {
     request<Comment>(`/comments/${commentId}`, { method: 'PUT', body: JSON.stringify({ body }) }),
 
   deleteComment: (commentId: number) => request<void>(`/comments/${commentId}`, { method: 'DELETE' }),
+
+  // --- branding (reads are public; writes are ADMIN only) ---
+  getBranding: () => request<Branding>('/branding'),
+
+  setCompanyName: (companyName: string) =>
+    request<Branding>('/branding', { method: 'PUT', body: JSON.stringify({ companyName }) }),
+
+  setLogo: (file: File) => {
+    const form = new FormData()
+    form.append('file', file)
+    return request<Branding>('/branding/logo', { method: 'PUT', body: form })
+  },
+
+  clearLogo: () => request<Branding>('/branding/logo', { method: 'DELETE' }),
+
+  /**
+   * The logo is a public GET, so it can be an ordinary <img src> with no token attached -
+   * unlike an attachment, which has to be fetched as a blob.
+   */
+  logoUrl: (version: number | null) => `/api/branding/logo${version ? `?v=${version}` : ''}`,
 
   // --- attachments ---
   listAttachments: (ticketKey: string) => request<Attachment[]>(`/tickets/${ticketKey}/attachments`),
