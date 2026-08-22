@@ -192,6 +192,61 @@ class ProjectTemplateApiTest {
     }
 
     @Test
+    void thePartyPlanningTemplateBuildsAWholeEvent() throws Exception {
+        createProject("BDAY", templateIdOf("Party Planning"));
+
+        mvc.perform(get("/api/projects/BDAY").header("Authorization", "Bearer " + adminToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.templateName").value("Party Planning"))
+                .andExpect(jsonPath("$.lanes.length()").value(5))
+                .andExpect(jsonPath("$.lanes[0].name").value("Ideas"))
+                .andExpect(jsonPath("$.lanes[0].initial").value(true))
+                .andExpect(jsonPath("$.lanes[3].name").value("On The Day"))
+                .andExpect(jsonPath("$.lanes[4].name").value("Done"))
+                .andExpect(jsonPath("$.lanes[4].done").value(true));
+
+        mvc.perform(get("/api/projects/BDAY/tickets").param("size", "50")
+                        .header("Authorization", "Bearer " + adminToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.page.totalElements").value(10))
+                // The things that decide everything else, in the lane you start in.
+                .andExpect(jsonPath("$.content[?(@.title == 'Guest list and invitations')].status")
+                        .value("Ideas"))
+                .andExpect(jsonPath("$.content[?(@.title == 'Set the budget')].priority")
+                        .value("HIGHEST"))
+                // The things that must be booked wait in their own lane.
+                .andExpect(jsonPath("$.content[?(@.title == 'Book the venue')].status")
+                        .value("To Book"))
+                .andExpect(jsonPath("$.content[?(@.title == 'Running order for the day')].status")
+                        .value("On The Day"));
+    }
+
+    /**
+     * On a Recruitment board a ticket is a candidate, so it seeds none - you cannot pre-create
+     * the people who apply. The work of opening the vacancy lives in Job Opening instead.
+     */
+    @Test
+    void aPipelineBoardSeedsNoTicketsAndItsSetupWorkLivesElsewhere() throws Exception {
+        createProject("PIPE", templateIdOf("Recruitment"));
+        mvc.perform(get("/api/projects/PIPE/tickets").param("size", "50")
+                        .header("Authorization", "Bearer " + adminToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.page.totalElements").value(0));
+
+        createProject("VACANCY", templateIdOf("Job Opening"));
+        mvc.perform(get("/api/projects/VACANCY").header("Authorization", "Bearer " + adminToken))
+                .andExpect(jsonPath("$.lanes[0].name").value("Drafting"))
+                .andExpect(jsonPath("$.lanes[4].name").value("Closed"));
+        mvc.perform(get("/api/projects/VACANCY/tickets").param("size", "50")
+                        .header("Authorization", "Bearer " + adminToken))
+                .andExpect(jsonPath("$.page.totalElements").value(5))
+                .andExpect(jsonPath("$.content[?(@.title == 'Write the job description')].status")
+                        .value("Drafting"))
+                .andExpect(jsonPath("$.content[?(@.title == 'Agree the scorecard')].status")
+                        .value("Drafting"));
+    }
+
+    @Test
     void aTemplateMayPrescribeNoStartingWork() throws Exception {
         createProject("EMPTY", templateIdOf("Kanban"));
 
@@ -247,18 +302,33 @@ class ProjectTemplateApiTest {
 
     @Test
     void editingStarterTicketsDoesNotTouchProjectsAlreadyMade() throws Exception {
-        long id = templateIdOf("Recruitment");
+        // Its own template, not a built-in: this test reshapes what it edits, and other tests
+        // in this class read the built-ins expecting their shipped shape.
+        long id = mapper.readTree(mvc.perform(post("/api/templates")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("Authorization", "Bearer " + adminToken)
+                        .content("""
+                                {"name":"Editable","lanes":[
+                                    {"name":"Start","initial":true,"done":false},
+                                    {"name":"End","initial":false,"done":true}],
+                                 "starterTickets":[
+                                    {"title":"First","type":"TASK","priority":"LOW","lane":"Start"},
+                                    {"title":"Second","type":"TASK","priority":"LOW","lane":"Start"},
+                                    {"title":"Third","type":"TASK","priority":"LOW","lane":"End"}]}
+                                """))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString()).get("id").asLong();
         createProject("HIRE1", id);
 
         mvc.perform(put("/api/templates/" + id)
                         .contentType(MediaType.APPLICATION_JSON)
                         .header("Authorization", "Bearer " + adminToken)
                         .content("""
-                                {"name":"Recruitment","description":"Trimmed",
-                                 "lanes":[{"name":"Applied","initial":true,"done":false},
-                                          {"name":"Decided","initial":false,"done":true}],
+                                {"name":"Editable","description":"Trimmed",
+                                 "lanes":[{"name":"Start","initial":true,"done":false},
+                                          {"name":"End","initial":false,"done":true}],
                                  "starterTickets":[
-                                    {"title":"Only one now","type":"TASK","priority":"LOW","lane":"Applied"}]}
+                                    {"title":"Only one now","type":"TASK","priority":"LOW","lane":"Start"}]}
                                 """))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.starterTickets.length()").value(1));

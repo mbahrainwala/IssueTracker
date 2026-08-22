@@ -379,9 +379,11 @@ nothing in common:
 | **Software Development** | Backlog → To Do → In Progress → In Review → Done |
 | **Legal Case** | Intake → Discovery → Filings Due → Awaiting Hearing → Closed |
 | **Trip Planning** | Ideas → Researching → Booked → Packed → Done |
+| **Party Planning** | Ideas → To Book → Booked → On The Day → Done |
 | **Recruitment** | Applied → Screening → Interviewing → Offer → Decided |
+| **Job Opening** | Drafting → In Review → Approved → Advertised → Closed |
 
-Those five ship with the app. **Only an administrator can define new ones**, from **Templates**
+Those seven ship with the app. **Only an administrator can define new ones**, from **Templates**
 in the top nav (`/admin/templates`) — a template shapes how everybody else's projects begin, so
 it is an installation-wide decision rather than a per-project one. Reading them is open to any
 signed-in user, because the create-project dialog offers them and previews their lanes.
@@ -438,7 +440,9 @@ confirmations. Those are properties of the *kind* of project — which is what a
 | **Software Development** | Set up the repository and CI · Agree the definition of done · Write the first release notes |
 | **Legal Case** | Run the conflict check · Engagement letter signed and filed · Client documents · Key dates and limitation period |
 | **Trip Planning** | **Travel documents** · Check passports and visas · Book transport · Book accommodation · Packing list |
-| **Recruitment** | Write the job description · Agree the interview loop · Agree the scorecard |
+| **Party Planning** | Guest list and invitations · Set the budget · Pick the date · Book the venue · Food and drink · Music · Cake and decorations · Photography · Running order · Thank-you notes |
+| **Recruitment** | *(none — see below)* |
+| **Job Opening** | Job description · Salary band and headcount approval · Interview loop · Scorecard · Where to advertise |
 
 Each starter carries a title, an optional description, a type, a priority, and **which lane it
 lands in** — so a legal matter's tickets appear in `Intake` and a trip's in `Ideas`. A starter
@@ -457,6 +461,16 @@ any other. Nothing marks them as special afterwards.
 > old name. At project-creation time the same mismatch is treated more gently: the ticket falls
 > back to the starting lane rather than failing the whole creation, because a half-made project
 > would be worse than a ticket one column to the left.
+
+> **Why Recruitment seeds nothing.** Its lanes are `Applied → Screening → Interviewing → Offer
+> → Decided`, so on that board a **ticket is a candidate**. You cannot pre-create the people who
+> apply, and setup tasks dropped into `Applied` would sit there pretending to be applicants. The
+> work of opening a vacancy — writing the description, agreeing the loop and the scorecard —
+> belongs to a differently shaped project, so it lives in **Job Opening**, which pairs with
+> Recruitment. `V15` corrects this; earlier versions shipped those tickets on Recruitment.
+>
+> It is a useful test of whether a template is right: if a ticket on the board is a *thing
+> flowing through a pipeline*, starter tickets probably do not belong on it.
 
 Starter tickets do not currently nest — a template can create an `EPIC`, but not children
 filed under it.
