@@ -1,8 +1,21 @@
 spring:
   datasource:
-    url: ${MYSQL_URL:jdbc:mysql://localhost:3306/issuetracker?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC}
+    # nullCatalogMeansCurrent=true is REQUIRED, not optional tuning.
+    #
+    # Connector/J 8 defaults it to false, which makes JDBC metadata lookups span every database
+    # on the server rather than the one you connected to. If any other database has a table of
+    # the same name (a `users` table is almost guaranteed), Hibernate's schema validation may
+    # match that one instead and fail at startup with a message like:
+    #
+    #   Schema-validation: wrong column type encountered in column [id] in table [users];
+    #   found [varchar (Types#VARCHAR)], but expecting [bigint (Types#BIGINT)]
+    #
+    # ...even though this application's own table is perfectly correct. Keep this parameter if
+    # you override MYSQL_URL.
+    url: ${MYSQL_URL:jdbc:mysql://localhost:3306/issuetracker?createDatabaseIfNotExist=true&nullCatalogMeansCurrent=true&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC}
     username: ${MYSQL_USER:root}
-    password: ${MYSQL_PASSWORD:root}
+    password: ${MYSQL_PASSWORD:admin}
     driver-class-name: com.mysql.cj.jdbc.Driver
   jpa:
     database-platform: org.hibernate.dialect.MySQLDialect
+

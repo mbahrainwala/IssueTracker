@@ -108,11 +108,30 @@ Overridable via environment variables:
 
 | Variable         | Default                                             |
 |------------------|-----------------------------------------------------|
-| `MYSQL_URL`      | `jdbc:mysql://localhost:3306/issuetracker?createDatabaseIfNotExist=true&...` |
+| `MYSQL_URL`      | `jdbc:mysql://localhost:3306/issuetracker?createDatabaseIfNotExist=true&nullCatalogMeansCurrent=true&...` |
 | `MYSQL_USER`     | `root`                                              |
-| `MYSQL_PASSWORD` | `root`                                              |
+| `MYSQL_PASSWORD` | `admin`                                             |
 
 You can also select the profile without touching the command line by setting `DB_PROFILE=mysql`.
+
+> **Keep `nullCatalogMeansCurrent=true` if you override `MYSQL_URL`.** Connector/J 8 defaults it
+> to `false`, which makes JDBC metadata lookups span **every database on the server** instead of
+> the one you connected to. If any other database has a same-named table — a `users` table is
+> almost guaranteed — Hibernate's schema validation can match that one and refuse to start:
+>
+> ```
+> Schema-validation: wrong column type encountered in column [id] in table [users];
+> found [varchar (Types#VARCHAR)], but expecting [bigint (Types#BIGINT)]
+> ```
+>
+> The error names your own table but is describing someone else's. Confirm with:
+>
+> ```sql
+> SELECT table_schema, column_type FROM information_schema.columns
+> WHERE table_name = 'users' AND column_name = 'id';
+> ```
+>
+> More than one row means the lookup is ambiguous and this flag is the fix.
 
 ## Schema migrations (Flyway)
 
@@ -138,6 +157,95 @@ Each project stores a `ticket_seq` counter. Creating a ticket re-reads the proje
 (`PROJ1-1`, `PROJ1-2`, …) on the ticket. The row lock is what prevents two concurrent creates
 from claiming the same number; a unique constraint on `(project_id, ticket_number)` backstops it
 at the database level. Numbering is per project, so `PROJ2` starts again at 1.
+
+## Archiving
+
+Both **tickets** and **projects** can be archived: hidden from the day-to-day views, kept intact,
+and restorable at any time. **Anything archived is read-only until it is restored.**
+
+### Archived is read-only
+
+An archived ticket, and everything inside an archived project, refuses content changes with
+`409 Conflict`. That covers the obvious routes and the ones that skip the usual write guard:
+
+| Action on archived content            | Result |
+|---------------------------------------|--------|
+| Edit or move the ticket               | `409`  |
+| Create a ticket in the project        | `409`  |
+| Add a comment                         | `409`  |
+| Edit or delete **your own** comment   | `409`  |
+| Attach or remove **your own** document | `409` |
+| Add or remove a ticket link           | `409`  |
+| File it under an epic / add children  | `409`  |
+| Rename the project, change membership | `409`  |
+| **Read** anything                     | `200`  |
+
+Three of those needed explicit checks because they bypass the guard: a comment author edits via
+an authorship shortcut, unlinking only tests permission with a boolean, and the admin assignment
+endpoint never touches `AccessGuard` at all. The UI mirrors the rules — disabled fields, hidden
+buttons, and a banner explaining what to do — but the server is what enforces them.
+
+Deleting is deliberately still allowed on archived items: archiving is the reversible option, and
+having to restore something merely to throw it away would be perverse. An archived ticket still
+counts against its project, though — see [Permissions](#permissions) for the rule that a project
+must be empty before it can be deleted.
+
+### Tickets
+
+Archive from the ticket page; the button is disabled unless the ticket is in **Done**.
+
+Each project's board has a third tab, **Archived**, listing what has been archived with when and
+by whom, and a **Restore** action. The board and list tabs never show archived tickets, and the
+project card's ticket count excludes them — that's the whole point of the feature.
+
+**An epic can only be archived once every one of its tickets is archived.** Archiving an epic
+with live work under it would hide that work behind a closed parent, so it is refused with a
+count of what is left:
+
+```
+PROJ1-6 still has 1 ticket that is not archived - archive them first
+```
+
+The epic's ticket list shows how many remain (`2 of 5 not archived`), with archived children
+dimmed and badged so you can see the whole picture.
+
+Other rules:
+
+- **Only `DONE` tickets can be archived** — including epics, which need `DONE` *and* all children
+  archived.
+- **Restore respects the hierarchy**: a child under an archived epic cannot be restored on its
+  own (`Its epic PROJ1-6 is archived - restore the epic first`), otherwise live work would sit
+  under an archived parent. Equally, live work cannot be filed *into* an archived epic.
+- Archived tickets are not offered as epic candidates.
+
+### Projects
+
+A project lead or an administrator can archive a project from **Settings**. Archived projects
+leave the project list and appear under its **Archived** tab, showing when and by whom, with a
+**Restore** action. There is no "everything must be done first" rule here — a project can be
+shelved mid-flight, and comes back exactly as it was.
+
+The project card's ticket count always excludes archived tickets.
+
+## Status history
+
+Every move between board buckets is logged with **who** moved it, **from** which bucket, **to**
+which, and **when** — whether it came from a board drag, the sidebar dropdown, or a `PATCH`:
+
+```
+moved from Backlog to To Do by Alice Nguyen on 20 Aug 2026 at 23:14
+moved from To Do to In Progress by Bob Carter on 20 Aug 2026 at 23:14
+moved from In Progress to Done by Alice Nguyen on 20 Aug 2026 at 23:14
+```
+
+The ticket page shows the most recent move by default, with **Show all** for the full trail
+(newest first, the latest badged). The last entry is the last person who moved it.
+
+Setting a ticket to the bucket it is already in is **not** a move and leaves no entry, so
+re-saving a form does not pollute the trail. Entries are ordered by id rather than timestamp:
+MySQL `TIMESTAMP` is second-precision, so two moves in the same second would otherwise sort
+arbitrarily. History follows project visibility like everything else, and is kept as a full log
+rather than a "last mover" column so the trail survives later moves.
 
 ## Epics
 
@@ -181,11 +289,211 @@ ticket you start from and read access on the other one — and a link whose far 
 project you cannot see is hidden from you entirely, so links never leak titles across the
 visibility boundary.
 
+## Attachments
+
+Any number of documents can be attached to a ticket (default cap: 20 per ticket, 10 MB each).
+Attachments follow the ticket's own access rules — read them if you can view the project, add
+them if you can write to it — and an archived ticket accepts no new ones.
+
+**Only the metadata is in the database.** The bytes are written to `app.attachments.directory`
+under a freshly generated UUID with no extension; the uploaded filename is stored as display
+text and never used to build a path. There is consequently nothing to traverse, and nothing in
+that directory is reachable except through `GET /api/attachments/{id}`, which re-checks project
+membership on every request. Knowing an id is not access.
+
+### What may be uploaded
+
+An **allow-list**, not a list of banned executables — a deny-list is never finished, and the
+format nobody thought of would be allowed by default:
+
+```
+pdf doc docx xls xlsx ppt pptx  txt md csv json  png jpg jpeg gif webp svg  zip
+```
+
+Three independent gates run in order, and no bytes reach disk until all three pass:
+
+1. **Extension** must be on the list above. The declared MIME type from the browser is ignored
+   entirely — a client can claim anything — and the type served back is the one mapped from the
+   extension.
+2. **Content** must not look executable. The leading bytes are checked for `MZ` (Windows), ELF,
+   Mach-O, `#!` and the Java class magic **whatever the file is called**, so `payload.exe`
+   renamed to `invoice.pdf` is still refused. Zip-based formats (`docx`, `xlsx`, `pptx`, `zip`)
+   must genuinely start with `PK`.
+3. **Filename** must survive sanitising: directory separators, control characters and leading
+   dots are stripped, so `../../../etc/passwd.txt` is stored as `passwd.txt`.
+
+### Downloads are inert
+
+Every download is served as `application/octet-stream` with `Content-Disposition: attachment`,
+`X-Content-Type-Options: nosniff` and a locked-down CSP — regardless of what the file actually
+is. An uploaded SVG or HTML page handed back with its real type would run script on this origin
+with the viewer's session, so nothing is ever rendered in place; it is only ever saved. That is
+also why SVG can stay on the allow-list.
+
+Because the endpoint is authorised by the bearer token, a plain `href` cannot download it — the
+UI fetches the file and clicks it through a temporary object URL.
+
+A document can be removed by whoever uploaded it or by a global administrator, which deletes the
+row and the file together. See [Owning what you wrote](#owning-what-you-wrote). Deleting the
+**ticket** clears its documents from disk too.
+
+### Keeping the store tidy
+
+File deletions happen **after the surrounding transaction commits**, never inside it. Deleting
+inline would destroy the bytes for good if the transaction then rolled back, leaving rows
+pointing at nothing; waiting for the commit inverts the failure, so a failed unlink merely
+orphans a file — wasted disk, nothing lost.
+
+Orphans can still appear: a crash between writing a file and committing its row, or an unlink
+the OS refuses. A **nightly sweep** removes files no database row points at:
+
+| Setting | Default | |
+|---|---|---|
+| `ATTACHMENT_SWEEP_CRON` | `0 30 3 * * *` | `-` disables the schedule |
+| `ATTACHMENT_SWEEP_ZONE` | `UTC` | |
+| `ATTACHMENT_ORPHAN_GRACE` | `6h` | how old a file must be before it is judged |
+
+The grace period is the load-bearing part. An upload writes its bytes before its row commits,
+so for a moment a perfectly good file is indistinguishable from an orphan — waiting a few hours
+makes that window irrelevant, and an orphan is in no hurry. The sweep only ever deletes files,
+never rows, so the worst a bug here could do is remove a file that was about to be claimed.
+
+> If you run more than one instance against the same store, they will all sweep. That is
+> harmless — the work is idempotent and each file is judged against the same shared database —
+> but set `ATTACHMENT_SWEEP_CRON=-` on all but one if you would rather it ran once.
+
+## Branding
+
+An administrator can put the company name and logo in the title bar from **Branding** in the top
+nav (`/admin/branding`). Both are optional: with no name the app calls itself Issue Tracker, and
+with no logo it draws its own mark. They appear in the app header, on the sign-in screen, and in
+the browser tab (`Northwind Ltd · Issue Tracker`).
+
+| | |
+|---|---|
+| `GET /api/branding` | **public** — name and whether a logo is set |
+| `GET /api/branding/logo` | **public** — the image itself |
+| `PUT /api/branding` | `ADMIN` — set or clear the name |
+| `PUT /api/branding/logo` | `ADMIN` — upload an image |
+| `DELETE /api/branding/logo` | `ADMIN` — remove it |
+
+**The two reads are deliberately anonymous.** The sign-in page is branded, so the name and logo
+have to be fetchable before anyone has a session — which means an anonymous visitor who can reach
+the login page learns which company runs the tracker. That is what branding is for, but it is a
+real disclosure and worth knowing. Only `GET` is opened; the writes are `@PreAuthorize`'d.
+
+A logo must be a PNG, JPEG, GIF, WebP or SVG of at most 512 KB (`BRANDING_MAX_LOGO_BYTES`, with
+`BRANDING_DIR` for where it lands), and
+is screened for executable content by the same magic-byte check that guards attachments — an
+`.exe` renamed `logo.png` is refused. It is served with its real type, since it has to render in
+an `<img>`, but with `nosniff` and `default-src 'none'; sandbox`: an SVG opened directly in a tab
+would otherwise be a scripting context, and sandboxed it is only ever a picture.
+
+### Where the logo is kept
+
+The image is a **file on disk** under `BRANDING_DIR` (default `data/branding`); the database row
+beside it holds only the name, content type and timestamp. There is one logo, so it needs no
+key — it is a single fixed file, written to a temporary name and moved into place so a failed
+write never leaves a truncated image where the whole one used to be. Mount that directory as a
+volume, or the logo does not survive a redeploy.
+
+> **It must not sit inside the attachment directory.** The
+> [nightly orphan sweep](#keeping-the-store-tidy) deletes files in the attachment store that no
+> attachment row points at, and no attachment row will ever point at the logo — it would look
+> exactly like an orphan and vanish six hours later. That is a configuration mistake which
+> looks fine until it silently eats the logo, so **the app refuses to start** if
+> `app.branding.directory` is the same as, or nested inside, `app.attachments.directory`.
+
+> **Why the `logo` column was dropped rather than kept as a blob** (`V10`)
+>
+> It was briefly a `LONGBLOB`, and MySQL would not start: H2 and MySQL disagree about what a
+> large binary column *is*. The same declaration is reported by MySQL as `LONGVARBINARY` and by
+> H2 as `BLOB`, so under `ddl-auto: validate` no single mapping satisfies both — `@Lob byte[]`
+> expects `BLOB` and MySQL refuses with *"found [longblob (Types#LONGVARBINARY)], but expecting
+> [tinyblob (Types#BLOB)]"*, while `@JdbcTypeCode(LONGVARBINARY)` fixes MySQL and breaks H2 in
+> the mirror image. On disk the question does not arise.
+>
+> `V10` also clears `logo_content_type` and `logo_updated_at`, because those are what `hasLogo`
+> is computed from: leaving them set would advertise a logo with no bytes behind it and hand
+> every caller a 404. An installation that had already uploaded one re-uploads it.
+>
+> **This class of bug is invisible to the test suite**, which runs on H2. After changing
+> anything about the schema, start the app against MySQL — `docker compose up -d mysql`, then
+> `./mvnw spring-boot:run -Dspring-boot.run.profiles=mysql` — and confirm it boots.
+
+The client appends the logo's last-updated stamp to the image URL (`/api/branding/logo?v=…`), so
+a replacement arrives under a new address instead of waiting out the hour-long cache.
+
+## Formatting text
+
+Ticket descriptions, project descriptions and comments support **bold**, *italic* and
+underline, with the shortcuts you already know:
+
+| | Shortcut | Typed as |
+|---|---|---|
+| **Bold** | `Ctrl`/`Cmd` + `B` | `**bold**` |
+| *Italic* | `Ctrl`/`Cmd` + `I` | `*italic*` |
+| Underline | `Ctrl`/`Cmd` + `U` | `__underline__` |
+
+Each shortcut **toggles**: pressing it again on a marked selection removes the markers. With
+nothing selected it inserts the pair and parks the caret between them. Every editor also carries
+a small **B / I / U** toolbar, so the feature is discoverable without knowing the syntax.
+
+**Marks combine.** Bold, italic and underline can all sit on the same run of text, in any order,
+and each toggles off independently: `***both***` is bold *and* italic, `__**text**__` adds
+underline over bold. Applying all three and removing all three returns the text to plain.
+
+> Bold and italic share the asterisk and differ only in how many, so the editor counts the
+> **run** of markers around the selection rather than matching them as strings — one asterisk
+> is italic, two bold, three both. A literal "does it already end with `*`?" test sees the
+> second asterisk of a bold pair and strips it, which makes bold-plus-italic impossible. The
+> editor also steps outward over a *different* mark sitting between the selection and its own
+> markers, so un-bolding the text of `__**text**__` finds the bold it should remove.
+
+A marked run must begin and end with a non-space, the same rule markdown uses, so `2 * 3 * 4`
+stays multiplication rather than becoming an italic ` 3 `. An unclosed `**` is shown literally.
+
+> **Why markers in a plain text column, and not HTML?**
+>
+> The markers are ordinary characters in the ordinary `description`/`body` columns — no
+> migration, and text written before this feature renders unchanged. Editing stays a real
+> `<textarea>`, so the string that is typed, stored and re-rendered is the same string
+> throughout; a `contenteditable` would introduce a second representation that can drift.
+>
+> Most importantly it keeps the invariant from the section below: the renderer emits React
+> elements and **never** hands a string to the DOM as HTML, so there is no sanitiser to get
+> right and no stored-XSS surface. Accepting HTML would have created both.
+
+## Links in descriptions and comments
+
+URLs typed into a ticket description, a project description or a comment are turned into
+clickable links that **open in a new tab**, with `rel="noopener noreferrer"` so the opened page
+cannot reach back through `window.opener` and navigate the tab it came from.
+
+Only `http` and `https` become links. Anything else someone types — `javascript:`, `data:` — is
+left as inert text. User-written text is rendered as React children throughout and never as
+HTML, so markup pasted into a comment is displayed, not executed.
+
+Links and formatting are parsed in one pass, so a URL inside `**bold**` still becomes a link and
+underscores inside a URL are not read as underline markers.
+
 ## Permissions
 
 - **Global roles** — `ADMIN` (sees and administers everything) and `USER`.
-- **Per-project roles** — `LEAD` (rename the project, manage members, delete tickets),
+- **Per-project roles** — `LEAD` (rename the project, manage members, archive it),
   `MEMBER` (create/edit tickets and comments), `VIEWER` (read-only).
+
+**Deleting a ticket is reserved for a global `ADMIN`** — a project lead gets `403` and archives
+instead. Deleting takes the ticket's comments, attachments, links and status history with it and
+cannot be undone, whereas archiving gets it out of the way reversibly. The **Delete** button on a
+ticket is shown only to administrators.
+
+**A project can only be deleted once it is empty.** Deleting one that still has tickets returns
+`409 Conflict` naming how many are left; archived tickets count, since they are still work the
+delete would destroy. A lead may delete a project, but only after someone has removed its
+tickets one by one — which, given the rule above, means an administrator. An empty project is a
+bookkeeping mistake and goes without ceremony; a full one is a body of work and should not
+vanish on a single click.
 
 ### Project leads
 
@@ -200,6 +508,32 @@ A project must always keep at least one lead: removing or demoting the last one 
 `409 Conflict`, as does an admin trying to strip it via the assignment picker. Promote a
 co-lead first.
 
+### Owning what you wrote
+
+**Comments and attachments belong to whoever added them.** Only their author/uploader or a
+**global `ADMIN`** may edit or remove one:
+
+| Who                                | Remove someone else's comment / attachment |
+|------------------------------------|--------------------------------------------|
+| The author / uploader              | allowed                                    |
+| Global `ADMIN`                     | allowed                                    |
+| Project `LEAD`                     | `403`                                      |
+| Project `MEMBER` / `VIEWER`        | `403`                                      |
+| Anyone, on an **archived** ticket  | `409`                                      |
+
+Deleting the whole **ticket** is stricter still — global `ADMIN` only, its author included; see
+[Permissions](#permissions).
+
+A project lead is deliberately *not* on that list. Leading a project is not the same as owning
+what other people wrote in it — a lead who needs a comment gone escalates to an administrator.
+This is the one place where `LEAD` is not a superset of `MEMBER`, which is why it goes through
+`AccessGuard.requireOwnerOrAdmin` rather than the usual `canAdminister`.
+
+The archive rule wins over both: once a ticket is archived nobody edits or deletes its comments
+and attachments, not even their author or an administrator. Restore it first. The UI matches —
+on an archived ticket the comment box, the **Delete** links and **Attach files** are all gone,
+not merely disabled.
+
 > Earlier versions had a singular `projects.lead_id` column *and* a `LEAD` membership role,
 > which meant two sources of truth that could disagree. `V3__multiple_project_leads.sql` folds
 > the column into `project_members` (promoting or inserting rows for existing leads first), so
@@ -208,9 +542,15 @@ co-lead first.
 Users only see projects they lead or belong to. Authentication is a stateless JWT bearer token;
 set `JWT_SECRET` (≥32 bytes) in any real deployment.
 
+Attachment storage is configured with `ATTACHMENT_DIR` (default `data/attachments`),
+`ATTACHMENT_MAX_BYTES` (default 10 MB) and `ATTACHMENT_MAX_PER_TICKET` (default 20). **The
+directory must not sit under anything served statically** — files are handed out only through
+the API, after the project check. In a container, mount it as a volume so attachments survive a
+redeploy; `data/` is gitignored.
+
 ### Administering users
 
-Admins get a **Users** entry in the top nav (`/admin/users`). Accounts are **disabled, never
+Admins get **Users** and **Branding** entries in the top nav. Accounts are **disabled, never
 deleted**, so the tickets and comments they authored keep pointing at a real person.
 
 Disabling takes effect immediately: every request re-checks the account, so a token issued
@@ -269,7 +609,9 @@ All routes require `Authorization: Bearer <token>` except `/api/auth/register` a
 | `PUT`    | `/api/admin/users/{id}/password`        | Reset a password (**admin**)     |
 | `GET`    | `/api/admin/users/{id}/projects`        | A user's project assignments (**admin**) |
 | `PUT`    | `/api/admin/users/{id}/projects`        | Replace their assignments (**admin**) |
-| `GET`    | `/api/projects`                         | Projects visible to you          |
+| `GET`    | `/api/projects`                         | Projects visible to you (`archived`) |
+| `POST`   | `/api/projects/{key}/archive`           | Archive a project                |
+| `POST`   | `/api/projects/{key}/restore`           | Restore an archived project      |
 | `POST`   | `/api/projects`                         | Create a project                 |
 | `GET`    | `/api/projects/{key}`                   | Project detail                   |
 | `PUT`    | `/api/projects/{key}`                   | Update a project                 |
@@ -277,9 +619,10 @@ All routes require `Authorization: Bearer <token>` except `/api/auth/register` a
 | `GET`    | `/api/projects/{key}/members`           | List members                     |
 | `POST`   | `/api/projects/{key}/members`           | Add / change a member's role     |
 | `DELETE` | `/api/projects/{key}/members/{userId}`  | Remove a member                  |
-| `GET`    | `/api/projects/{key}/tickets`           | Search tickets (`status`, `assigneeId`, `q`, `page`, `size`) |
+| `GET`    | `/api/projects/{key}/tickets`           | Search tickets (`status`, `assigneeId`, `q`, `archived`, `page`, `size`) |
 | `POST`   | `/api/projects/{key}/tickets`           | Create a ticket                  |
 | `GET`    | `/api/projects/{key}/epics`             | Epics of a project (epic picker)  |
+| `GET`    | `/api/tickets/{ticketKey}/history`      | Who moved it between buckets, and when |
 | `GET`    | `/api/tickets/{ticketKey}/children`     | Tickets filed under an epic      |
 | `POST`   | `/api/tickets/{ticketKey}/children`     | Add existing tickets to an epic  |
 | `DELETE` | `/api/tickets/{ticketKey}/children/{childKey}` | Remove a ticket from an epic |
@@ -291,11 +634,17 @@ All routes require `Authorization: Bearer <token>` except `/api/auth/register` a
 | `DELETE` | `/api/links/{linkId}`                   | Remove a link                    |
 | `PATCH`  | `/api/tickets/{ticketKey}`              | Partial update                   |
 | `PATCH`  | `/api/tickets/{ticketKey}/status`       | Transition status (board drag)   |
-| `DELETE` | `/api/tickets/{ticketKey}`              | Delete a ticket                  |
+| `POST`   | `/api/tickets/{ticketKey}/archive`      | Archive a finished ticket        |
+| `POST`   | `/api/tickets/{ticketKey}/restore`      | Bring it back from the archive   |
+| `DELETE` | `/api/tickets/{ticketKey}`              | Delete a ticket (`ADMIN` only)   |
 | `GET`    | `/api/tickets/{ticketKey}/comments`     | List comments                    |
 | `POST`   | `/api/tickets/{ticketKey}/comments`     | Add a comment                    |
 | `PUT`    | `/api/comments/{id}`                    | Edit a comment                   |
 | `DELETE` | `/api/comments/{id}`                    | Delete a comment                 |
+| `GET`    | `/api/tickets/{ticketKey}/attachments`  | List attached documents          |
+| `POST`   | `/api/tickets/{ticketKey}/attachments`  | Attach a document (multipart `file`) |
+| `GET`    | `/api/attachments/{id}`                 | Download one (forced `attachment`) |
+| `DELETE` | `/api/attachments/{id}`                 | Remove an attachment             |
 
 Errors come back as RFC 7807 `ProblemDetail` documents.
 
@@ -311,13 +660,13 @@ stability guarantee, and logs a warning on every paged request.
 
 ## UI
 
-- **Projects** — grid of the projects you can see, with a create dialog that suggests a key from
-  the name.
+- **Projects** — grid of the projects you can see, with **Active** and **Archived** tabs and a
+  create dialog that suggests a key from the name.
 - **Board** — five columns (Backlog → To Do → In Progress → In Review → Done) with drag-and-drop
   transitions that update optimistically and roll back if the server rejects the move. Toggle to
-  a table view; filter by assignee or search by title/key.
-- **Ticket** — inline title/description editing, status/type/priority/assignee/points/due date in
-  the sidebar, linked tickets, and threaded comments.
+  a table view or the **Archived** tab; filter by assignee or search by title/key.
+- **Ticket** — inline title/description editing, status/type/priority/assignee/epic/points/due
+  date in the sidebar, status history, linked tickets, and threaded comments.
 - **Settings** — project details, lead, membership and roles, and project deletion.
 - **Users** (admins only, in the top nav) — the admin dashboard: create accounts, edit
   name/email/role, reset passwords, and enable/disable accounts, with search and a
@@ -333,14 +682,22 @@ cd backend  && mvn test        # boots the app on in-memory H2 and exercises the
 cd frontend && npm run build   # type-check + production bundle
 ```
 
-45 backend tests across seven suites: core API (ticket-key numbering, transitions, comments),
+69 backend tests across eleven suites: core API (ticket-key numbering, transitions, comments),
 user administration (including immediate revocation on disable and the lockout guards),
 self-service password change, project assignment and the visibility rule it enforces, project
 leads (several per project, several projects per lead, leads staffing their own project, and
 last-lead protection), ticket linking (inverse relationships, cross-project links,
 duplicate/self-link rejection, visibility filtering), and epics (one epic per ticket, children
 listing, adding/removing from the epic side, same-project enforcement on both the picker and the
-API, and release-on-delete).
+API, and release-on-delete), and status history (who/from/to/when, both entry points, no entry
+for a non-move, and visibility), and archiving (the DONE gate, the all-children rule for epics,
+tab separation, frozen edits, and restore ordering), project archiving (tab separation,
+freezing, read-after-archive, restore, and delete-while-archived), and a suite dedicated to the
+read-only rule on the routes that bypass the write guard.
 
 Suites that depend on "the first registered account becomes ADMIN" run against their own
 in-memory database so they do not depend on execution order.
+
+The automated suite runs on H2. The MySQL profile has been exercised by hand against a live
+server: all four migrations validate, and login, per-project ticket numbering, epics, links and
+paged responses all behave the same as on H2.
