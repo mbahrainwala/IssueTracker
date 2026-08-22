@@ -82,10 +82,10 @@ class TicketArchiveApiTest {
         String ticket = create("Still in progress", "TASK", null);
 
         archive(ticket, 409);
-        moveTo(ticket, "IN_PROGRESS");
+        moveTo(ticket, "In Progress");
         archive(ticket, 409);
 
-        moveTo(ticket, "DONE");
+        moveTo(ticket, "Done");
         archive(ticket, 200);
 
         mvc.perform(get("/api/tickets/" + ticket).header("Authorization", "Bearer " + token))
@@ -98,7 +98,7 @@ class TicketArchiveApiTest {
     void archivedTicketsLeaveTheActiveListAndAppearInTheArchivedOne() throws Exception {
         String live = create("Stays visible", "TASK", null);
         String gone = create("Gets archived", "TASK", null);
-        moveTo(gone, "DONE");
+        moveTo(gone, "Done");
         archive(gone, 200);
 
         mvc.perform(get("/api/projects/ARC/tickets").header("Authorization", "Bearer " + token))
@@ -118,14 +118,14 @@ class TicketArchiveApiTest {
         String epic = create("Big push", "EPIC", null);
         String a = create("Child one", "TASK", epic);
         String b = create("Child two", "STORY", epic);
-        moveTo(epic, "DONE");
+        moveTo(epic, "Done");
 
         // Two live children: refused, and the message says how many.
         mvc.perform(post("/api/tickets/" + epic + "/archive").header("Authorization", "Bearer " + token))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.detail").value(org.hamcrest.Matchers.containsString("still has 2 tickets")));
 
-        moveTo(a, "DONE");
+        moveTo(a, "Done");
         archive(a, 200);
 
         // One left: still refused.
@@ -133,7 +133,7 @@ class TicketArchiveApiTest {
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.detail").value(org.hamcrest.Matchers.containsString("still has 1 ticket ")));
 
-        moveTo(b, "DONE");
+        moveTo(b, "Done");
         archive(b, 200);
 
         // All children archived: now the epic may go.
@@ -144,9 +144,9 @@ class TicketArchiveApiTest {
     void restoringPutsATicketBackAndIsBlockedUnderAnArchivedEpic() throws Exception {
         String epic = create("Closed epic", "EPIC", null);
         String child = create("Child of closed epic", "TASK", epic);
-        moveTo(child, "DONE");
+        moveTo(child, "Done");
         archive(child, 200);
-        moveTo(epic, "DONE");
+        moveTo(epic, "Done");
         archive(epic, 200);
 
         // The epic is archived, so its child must not come back on its own.
@@ -170,11 +170,11 @@ class TicketArchiveApiTest {
     @Test
     void archivedTicketsAreFrozenUntilRestored() throws Exception {
         String ticket = create("Frozen once archived", "TASK", null);
-        moveTo(ticket, "DONE");
+        moveTo(ticket, "Done");
         archive(ticket, 200);
 
         mvc.perform(patch("/api/tickets/" + ticket + "/status")
-                        .param("status", "TODO")
+                        .param("status", "To Do")
                         .header("Authorization", "Bearer " + token))
                 .andExpect(status().isConflict());
 
@@ -193,7 +193,7 @@ class TicketArchiveApiTest {
         String epic = create("Candidate epic", "EPIC", null);
         String done = create("Archived candidate kkq", "TASK", null);
         String open = create("Open candidate kkq", "TASK", null);
-        moveTo(done, "DONE");
+        moveTo(done, "Done");
         archive(done, 200);
 
         mvc.perform(get("/api/tickets/" + epic + "/candidates").param("q", "kkq")
@@ -213,7 +213,7 @@ class TicketArchiveApiTest {
         mvc.perform(get("/api/projects/ARC").header("Authorization", "Bearer " + token))
                 .andExpect(jsonPath("$.ticketCount").value(countBefore + 1));
 
-        moveTo(ticket, "DONE");
+        moveTo(ticket, "Done");
         archive(ticket, 200);
 
         mvc.perform(get("/api/projects/ARC").header("Authorization", "Bearer " + token))

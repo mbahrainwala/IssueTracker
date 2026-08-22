@@ -1,6 +1,5 @@
 package behrainwala.issuetracker.dto;
 
-import behrainwala.issuetracker.domain.TicketStatus;
 import behrainwala.issuetracker.domain.TicketStatusChange;
 
 import java.time.Instant;
@@ -17,16 +16,16 @@ public final class TicketHistoryDtos {
      */
     public record StatusChangeDto(
             Long id,
-            TicketStatus fromStatus,
-            TicketStatus toStatus,
+            String fromStatus,
+            String toStatus,
             UserDto movedBy,
             Instant movedAt,
             String summary) {
 
         public static StatusChangeDto from(TicketStatusChange change) {
             String summary = "moved from %s to %s by %s".formatted(
-                    change.getFromStatus().getLabel(),
-                    change.getToStatus().getLabel(),
+                    change.getFromStatus(),
+                    change.getToStatus(),
                     change.getMovedBy().getDisplayName());
             return new StatusChangeDto(
                     change.getId(),

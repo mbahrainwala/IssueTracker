@@ -2,8 +2,6 @@ package behrainwala.issuetracker.domain;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
-import jakarta.persistence.EnumType;
-import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
@@ -27,13 +25,15 @@ public class TicketStatusChange {
     @JoinColumn(name = "ticket_id", nullable = false)
     private Ticket ticket;
 
-    @Enumerated(EnumType.STRING)
-    @Column(name = "from_status", nullable = false, length = 20)
-    private TicketStatus fromStatus;
+    /**
+     * Lane names as they read at the time of the move - a snapshot, not a reference. A lane
+     * can later be renamed or deleted; what the trail says happened must not change with it.
+     */
+    @Column(name = "from_status", nullable = false, length = 60)
+    private String fromStatus;
 
-    @Enumerated(EnumType.STRING)
-    @Column(name = "to_status", nullable = false, length = 20)
-    private TicketStatus toStatus;
+    @Column(name = "to_status", nullable = false, length = 60)
+    private String toStatus;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "moved_by_id", nullable = false)
@@ -45,7 +45,7 @@ public class TicketStatusChange {
     protected TicketStatusChange() {
     }
 
-    public TicketStatusChange(Ticket ticket, TicketStatus fromStatus, TicketStatus toStatus, User movedBy) {
+    public TicketStatusChange(Ticket ticket, String fromStatus, String toStatus, User movedBy) {
         this.ticket = ticket;
         this.fromStatus = fromStatus;
         this.toStatus = toStatus;
@@ -61,11 +61,11 @@ public class TicketStatusChange {
         return ticket;
     }
 
-    public TicketStatus getFromStatus() {
+    public String getFromStatus() {
         return fromStatus;
     }
 
-    public TicketStatus getToStatus() {
+    public String getToStatus() {
         return toStatus;
     }
 

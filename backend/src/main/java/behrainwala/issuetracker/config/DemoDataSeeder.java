@@ -6,13 +6,14 @@ import behrainwala.issuetracker.domain.ProjectRole;
 import behrainwala.issuetracker.domain.Role;
 import behrainwala.issuetracker.domain.Ticket;
 import behrainwala.issuetracker.domain.TicketPriority;
-import behrainwala.issuetracker.domain.TicketStatus;
 import behrainwala.issuetracker.domain.TicketType;
 import behrainwala.issuetracker.domain.User;
 import behrainwala.issuetracker.repo.ProjectMemberRepository;
 import behrainwala.issuetracker.repo.ProjectRepository;
 import behrainwala.issuetracker.repo.TicketRepository;
 import behrainwala.issuetracker.repo.UserRepository;
+import behrainwala.issuetracker.service.ProjectTemplateService;
+import behrainwala.issuetracker.service.WorkflowService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.ApplicationArguments;
@@ -38,17 +39,23 @@ public class DemoDataSeeder implements ApplicationRunner {
     private final ProjectMemberRepository members;
     private final TicketRepository tickets;
     private final PasswordEncoder encoder;
+    private final WorkflowService workflow;
+    private final ProjectTemplateService templates;
 
     public DemoDataSeeder(UserRepository users,
                           ProjectRepository projects,
                           ProjectMemberRepository members,
                           TicketRepository tickets,
-                          PasswordEncoder encoder) {
+                          PasswordEncoder encoder,
+                          WorkflowService workflow,
+                          ProjectTemplateService templates) {
         this.users = users;
         this.projects = projects;
         this.members = members;
         this.tickets = tickets;
         this.encoder = encoder;
+        this.workflow = workflow;
+        this.templates = templates;
     }
 
     @Override
@@ -65,10 +72,20 @@ public class DemoDataSeeder implements ApplicationRunner {
         User bob = users.saveAndFlush(new User("bob", "bob@example.com",
                 encoder.encode("password"), "Bob Carter", Role.USER));
 
+        // The seeded projects go through a template like any other, so the demo shows the
+        // board coming from somewhere rather than existing by magic.
+        var engineering = templates.require(templates.defaultTemplate().getId());
+        var software = templates.byName("Software Development").orElse(engineering);
+
         Project platform = projects.saveAndFlush(
                 new Project("PROJ1", "Platform", "Core platform services and APIs"));
+        platform.setTemplate(software);
+        workflow.applyTemplate(platform, software);
+
         Project web = projects.saveAndFlush(
                 new Project("PROJ2", "Web App", "Customer-facing web experience"));
+        web.setTemplate(software);
+        workflow.applyTemplate(web, software);
 
         // PROJ1 deliberately has two leads, and Bob leads PROJ2 as well as co-leading nothing
         // else - showing both "many leads per project" and "many projects per lead".
@@ -79,21 +96,21 @@ public class DemoDataSeeder implements ApplicationRunner {
         members.save(new ProjectMember(web, alice, ProjectRole.MEMBER));
 
         newTicket(platform, alice, "Set up CI pipeline", TicketType.TASK,
-                TicketStatus.DONE, TicketPriority.HIGH, bob);
+                "Done", TicketPriority.HIGH, bob);
         newTicket(platform, alice, "Rate limit the public API", TicketType.STORY,
-                TicketStatus.IN_PROGRESS, TicketPriority.HIGH, alice);
+                "In Progress", TicketPriority.HIGH, alice);
         newTicket(platform, bob, "Token refresh returns 500 on expiry", TicketType.BUG,
-                TicketStatus.TODO, TicketPriority.HIGHEST, null);
+                "To Do", TicketPriority.HIGHEST, null);
         newTicket(web, bob, "Redesign the ticket board", TicketType.EPIC,
-                TicketStatus.BACKLOG, TicketPriority.MEDIUM, null);
+                "Backlog", TicketPriority.MEDIUM, null);
         newTicket(web, bob, "Keyboard shortcuts for triage", TicketType.STORY,
-                TicketStatus.TODO, TicketPriority.LOW, alice);
+                "To Do", TicketPriority.LOW, alice);
 
         log.info("Seeded demo data. Logins: admin/admin123, alice/password, bob/password");
     }
 
     private void newTicket(Project project, User reporter, String title, TicketType type,
-                           TicketStatus status, TicketPriority priority, User assignee) {
+                           String status, TicketPriority priority, User assignee) {
         Ticket ticket = new Ticket(project, project.nextTicketNumber(), title, reporter);
         ticket.setType(type);
         ticket.setStatus(status);

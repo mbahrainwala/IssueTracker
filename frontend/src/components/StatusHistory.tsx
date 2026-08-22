@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react'
 import { ApiError, api } from '../api/client'
 import type { StatusChange } from '../api/types'
-import { STATUS_LABELS } from '../api/types'
 import { formatDateTime } from '../format'
 import Avatar from './Avatar'
 
@@ -68,11 +67,11 @@ function MoveRow({ change, latest }: { change: StatusChange; latest: boolean }) 
     <div className={latest ? 'history-row history-row-latest' : 'history-row'}>
       <Avatar user={change.movedBy} size={26} />
       <span className="history-text">
-        <strong>{STATUS_LABELS[change.fromStatus]}</strong>
+        <strong>{change.fromStatus}</strong>
         <span className="history-arrow" aria-label="to">
           →
         </span>
-        <strong>{STATUS_LABELS[change.toStatus]}</strong>
+        <strong>{change.toStatus}</strong>
         <span className="muted"> by {change.movedBy.displayName}</span>
       </span>
       <span className="spacer" />

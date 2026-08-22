@@ -2,6 +2,7 @@ import type {
   Attachment,
   AuthResponse,
   Branding,
+  Lane,
   Comment,
   EpicRef,
   LinkType,
@@ -13,6 +14,7 @@ import type {
   ProjectRole,
   Role,
   StatusChange,
+  Template,
   Ticket,
   TicketLink,
   TicketPriority,
@@ -77,6 +79,34 @@ function query(params: Record<string, string | number | undefined | null>): stri
   }
   const qs = search.toString()
   return qs ? `?${qs}` : ''
+}
+
+/**
+ * A lane as submitted. The position is the index in the array; `id` identifies an existing
+ * lane so the server can tell a rename from a remove-and-add. A new lane has no id.
+ */
+export interface LaneInput {
+  id?: number | null
+  name: string
+  initial: boolean
+  done: boolean
+}
+
+export interface TemplateBody {
+  name: string
+  description?: string
+  lanes: LaneInput[]
+  starterTickets: StarterTicketInput[]
+}
+
+/** A starter ticket as submitted; the position is the index in the array. */
+export interface StarterTicketInput {
+  title: string
+  description?: string
+  type: TicketType
+  priority: TicketPriority
+  /** One of the template's own lane names, or empty for the starting lane. */
+  lane: string
 }
 
 export interface TicketPatch {
@@ -172,6 +202,8 @@ export const api = {
     projectKey: string
     name: string
     description?: string
+    /** Which board to start from. Omitted takes the default template. */
+    templateId?: number | null
     additionalLeadIds?: number[]
   }) => request<Project>('/projects', { method: 'POST', body: JSON.stringify(body) }),
 
@@ -281,6 +313,24 @@ export const api = {
     request<Comment>(`/comments/${commentId}`, { method: 'PUT', body: JSON.stringify({ body }) }),
 
   deleteComment: (commentId: number) => request<void>(`/comments/${commentId}`, { method: 'DELETE' }),
+
+  // --- project templates (anyone may read; ADMIN defines them) ---
+  listTemplates: () => request<Template[]>('/templates'),
+
+  createTemplate: (body: TemplateBody) =>
+    request<Template>('/templates', { method: 'POST', body: JSON.stringify(body) }),
+
+  updateTemplate: (id: number, body: TemplateBody) =>
+    request<Template>(`/templates/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
+
+  deleteTemplate: (id: number) => request<void>(`/templates/${id}`, { method: 'DELETE' }),
+
+  // --- a project's own lanes ---
+  listLanes: (key: string) => request<Lane[]>(`/projects/${key}/lanes`),
+
+  /** The whole board at once: the submitted order is the new order. */
+  setLanes: (key: string, lanes: LaneInput[]) =>
+    request<Lane[]>(`/projects/${key}/lanes`, { method: 'PUT', body: JSON.stringify({ lanes }) }),
 
   // --- branding (reads are public; writes are ADMIN only) ---
   getBranding: () => request<Branding>('/branding'),

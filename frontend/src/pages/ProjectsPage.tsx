@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ApiError, api } from '../api/client'
-import type { Project } from '../api/types'
+import type { Project, Template } from '../api/types'
 import Avatar from '../components/Avatar'
 import AuthImage from '../components/AuthImage'
 import Modal from '../components/Modal'
@@ -174,6 +174,28 @@ function CreateProjectModal({ onClose, onCreated }: { onClose: () => void; onCre
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 
+  // The board comes from a template. Loading them lets the dialog preview the lanes, so the
+  // choice is made on what the board looks like rather than on a name alone.
+  const [templates, setTemplates] = useState<Template[]>([])
+  const [templateId, setTemplateId] = useState<number | ''>('')
+
+  useEffect(() => {
+    let cancelled = false
+    api
+      .listTemplates()
+      .then((result) => {
+        if (cancelled) return
+        setTemplates(result)
+        setTemplateId(result.find((t) => t.name === 'Kanban')?.id ?? result[0]?.id ?? '')
+      })
+      .catch(() => setTemplates([]))
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  const chosen = templates.find((t) => t.id === templateId)
+
   // Suggest a key from the name until the user types one explicitly.
   const [keyTouched, setKeyTouched] = useState(false)
   function onNameChange(value: string) {
@@ -188,7 +210,12 @@ function CreateProjectModal({ onClose, onCreated }: { onClose: () => void; onCre
     setBusy(true)
     setError(null)
     try {
-      await api.createProject({ projectKey, name, description: description || undefined })
+      await api.createProject({
+        projectKey,
+        name,
+        description: description || undefined,
+        templateId: templateId === '' ? null : templateId,
+      })
       onCreated()
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Failed to create project')
@@ -222,6 +249,53 @@ function CreateProjectModal({ onClose, onCreated }: { onClose: () => void; onCre
           Description
           <textarea rows={3} value={description} onChange={(e) => setDescription(e.target.value)} />
         </label>
+        <label>
+          Board
+          <select
+            value={templateId}
+            onChange={(e) => setTemplateId(e.target.value ? Number(e.target.value) : '')}
+          >
+            {templates.map((template) => (
+              <option key={template.id} value={template.id}>
+                {template.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        {chosen && (
+          <div className="template-preview">
+            <p className="muted">{chosen.description}</p>
+            <ol className="lane-preview">
+              {[...chosen.lanes]
+                .sort((a, b) => a.order - b.order)
+                .map((lane) => (
+                  <li key={lane.id} className="lane-chip">
+                    {lane.name}
+                  </li>
+                ))}
+            </ol>
+            {chosen.starterTickets.length > 0 && (
+              <>
+                <p className="muted">
+                  and {chosen.starterTickets.length} starter ticket
+                  {chosen.starterTickets.length === 1 ? '' : 's'}:
+                </p>
+                <ul className="starter-preview">
+                  {chosen.starterTickets.map((ticket) => (
+                    <li key={ticket.id}>
+                      {ticket.title}
+                      <span className="muted"> · {ticket.lane ?? 'starting lane'}</span>
+                    </li>
+                  ))}
+                </ul>
+              </>
+            )}
+            <p className="muted">
+              All of this is copied into the project — lanes can be changed later in Settings,
+              and the tickets are ordinary tickets you can edit or delete.
+            </p>
+          </div>
+        )}
         {error && <p className="error">{error}</p>}
         <div className="form-actions">
           <button type="button" className="btn btn-ghost" onClick={onClose}>

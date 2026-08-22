@@ -4,6 +4,7 @@ import behrainwala.issuetracker.domain.Project;
 import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -55,4 +56,13 @@ public interface ProjectRepository extends JpaRepository<Project, Long> {
             order by p.projectKey
             """)
     List<Project> findAllWithMembers(@Param("archived") boolean archived);
+
+    /**
+     * A project remembers which template it was made from for display only, so deleting that
+     * template forgets the label rather than blocking on projects that have long since
+     * diverged from it.
+     */
+    @Modifying
+    @Query("update Project p set p.template = null where p.template.id = :templateId")
+    void clearTemplate(@Param("templateId") Long templateId);
 }

@@ -3,7 +3,6 @@ package behrainwala.issuetracker.dto;
 import behrainwala.issuetracker.domain.LinkType;
 import behrainwala.issuetracker.domain.Ticket;
 import behrainwala.issuetracker.domain.TicketPriority;
-import behrainwala.issuetracker.domain.TicketStatus;
 import behrainwala.issuetracker.domain.TicketType;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -25,7 +24,7 @@ public final class TicketLinkDtos {
             String projectKey,
             String title,
             TicketType type,
-            TicketStatus status,
+            String status,
             TicketPriority priority,
             UserDto assignee) {
 

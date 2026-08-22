@@ -4,12 +4,17 @@ import behrainwala.issuetracker.config.AppProperties;
 import behrainwala.issuetracker.domain.Project;
 import behrainwala.issuetracker.domain.ProjectMember;
 import behrainwala.issuetracker.domain.ProjectRole;
+import behrainwala.issuetracker.domain.ProjectTemplate;
+import behrainwala.issuetracker.domain.TemplateTicket;
+import behrainwala.issuetracker.domain.Ticket;
 import behrainwala.issuetracker.domain.User;
 import behrainwala.issuetracker.dto.ProjectDtos.AddMemberRequest;
 import behrainwala.issuetracker.dto.ProjectDtos.CreateProjectRequest;
 import behrainwala.issuetracker.dto.ProjectDtos.MemberDto;
 import behrainwala.issuetracker.dto.ProjectDtos.ProjectDto;
 import behrainwala.issuetracker.dto.ProjectDtos.UpdateProjectRequest;
+import behrainwala.issuetracker.dto.WorkflowDtos.LaneDto;
+import behrainwala.issuetracker.dto.WorkflowDtos.LanesRequest;
 import behrainwala.issuetracker.repo.ProjectMemberRepository;
 import behrainwala.issuetracker.repo.ProjectRepository;
 import behrainwala.issuetracker.repo.TicketRepository;
@@ -29,6 +34,8 @@ public class ProjectService {
     private final ProjectMemberRepository memberRepository;
     private final TicketRepository ticketRepository;
     private final ProjectImageStore imageStore;
+    private final WorkflowService workflow;
+    private final ProjectTemplateService templateService;
     private final ImagePolicy imagePolicy;
     private final AppProperties.Projects projectSettings;
     private final UserService userService;
@@ -38,6 +45,8 @@ public class ProjectService {
                           ProjectMemberRepository memberRepository,
                           TicketRepository ticketRepository,
                           ProjectImageStore imageStore,
+                          WorkflowService workflow,
+                          ProjectTemplateService templateService,
                           ImagePolicy imagePolicy,
                           AppProperties properties,
                           UserService userService,
@@ -46,6 +55,8 @@ public class ProjectService {
         this.memberRepository = memberRepository;
         this.ticketRepository = ticketRepository;
         this.imageStore = imageStore;
+        this.workflow = workflow;
+        this.templateService = templateService;
         this.imagePolicy = imagePolicy;
         this.projectSettings = properties.getProjects();
         this.userService = userService;
@@ -61,7 +72,9 @@ public class ProjectService {
 
     /** A project card always shows its live ticket count, never the archived ones. */
     private ProjectDto toDto(Project project) {
-        return ProjectDto.from(project, ticketRepository.countByProjectIdAndArchivedAtIsNull(project.getId()));
+        return ProjectDto.from(project,
+                ticketRepository.countByProjectIdAndArchivedAtIsNull(project.getId()),
+                workflow.laneDtos(project));
     }
 
     /**
@@ -108,7 +121,15 @@ public class ProjectService {
             throw new ConflictException("Project key already in use: " + key);
         }
         Project project = new Project(key, request.name(), request.description());
+        // A board is not optional: without lanes there is nowhere for a ticket to live. An
+        // unspecified template gets the default rather than an empty board.
+        ProjectTemplate template = request.templateId() == null
+                ? templateService.defaultTemplate()
+                : templateService.require(request.templateId());
+        project.setTemplate(template);
         projectRepository.saveAndFlush(project);
+        workflow.applyTemplate(project, template);
+        seedStarterTickets(project, template, current);
 
         // The creator leads what they create; co-leads can be named up front or added later.
         addMember(project, current, ProjectRole.LEAD);
@@ -119,7 +140,31 @@ public class ProjectService {
                     .forEach(id -> addMember(project, userService.requireById(id), ProjectRole.LEAD));
         }
         memberRepository.flush();
-        return ProjectDto.from(project, 0);
+        return toDto(project);
+    }
+
+    /**
+     * Creates the template's starter tickets - the work this kind of project always begins
+     * with. They are ordinary tickets from the moment they exist: renamed, moved, deleted or
+     * archived like any other, with the creator as their reporter.
+     * <p>
+     * A starter ticket naming a lane the project does not have falls back to the starting
+     * lane rather than failing the whole creation: a half-made project would be worse than a
+     * ticket one column to the left.
+     */
+    private void seedStarterTickets(Project project, ProjectTemplate template, User creator) {
+        String startingLane = workflow.initialLane(project).getName();
+
+        for (TemplateTicket starter : template.getStarterTickets()) {
+            Ticket ticket = new Ticket(project, project.nextTicketNumber(), starter.getTitle(), creator);
+            ticket.setDescription(starter.getDescription());
+            ticket.setType(starter.getType());
+            ticket.setPriority(starter.getPriority());
+            ticket.setStatus(starter.getLaneName() == null
+                    ? startingLane
+                    : workflow.laneNameOrDefault(project, starter.getLaneName(), startingLane));
+            ticketRepository.save(ticket);
+        }
     }
 
     private void addMember(Project project, User user, ProjectRole role) {
@@ -134,6 +179,24 @@ public class ProjectService {
         project.setName(request.name());
         project.setDescription(request.description());
         return toDto(project);
+    }
+
+    /** The project's board, for anyone who can see it. */
+    public List<LaneDto> lanes(String projectKey, User current) {
+        Project project = requireByKey(projectKey);
+        accessGuard.requireView(project, current);
+        return workflow.laneDtos(project);
+    }
+
+    /**
+     * Reshapes the board. Same rights as renaming the project, since the lanes are part of how
+     * the project is set up rather than of the work in it.
+     */
+    @Transactional
+    public List<LaneDto> setLanes(String projectKey, LanesRequest request, User current) {
+        Project project = requireByKey(projectKey);
+        accessGuard.requireAdmin(project, current);
+        return workflow.replaceLanes(project, request.lanes());
     }
 
     /**

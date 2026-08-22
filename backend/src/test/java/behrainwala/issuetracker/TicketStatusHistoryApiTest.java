@@ -48,10 +48,14 @@ class TicketStatusHistoryApiTest {
                 .andExpect(status().isCreated())
                 .andReturn().getResponse().getContentAsString()).get("token").asText();
 
+        // Built from the five-lane engineering template, so the trail below has somewhere to
+        // travel. Without a template a project gets the default three-lane Kanban board.
+        long templateId = templateIdOf("Software Development");
         mvc.perform(post("/api/projects")
                         .contentType(MediaType.APPLICATION_JSON)
                         .header("Authorization", "Bearer " + adminToken)
-                        .content("{\"projectKey\":\"HIS\",\"name\":\"History\"}"))
+                        .content("{\"projectKey\":\"HIS\",\"name\":\"History\",\"templateId\":%d}"
+                                .formatted(templateId)))
                 .andExpect(status().isCreated());
 
         long moverId = mapper.readTree(mvc.perform(post("/api/admin/users")
@@ -77,6 +81,19 @@ class TicketStatusHistoryApiTest {
                 .andReturn().getResponse().getContentAsString()).get("token").asText();
     }
 
+    private long templateIdOf(String name) throws Exception {
+        var templates = mapper.readTree(mvc.perform(get("/api/templates")
+                        .header("Authorization", "Bearer " + adminToken))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString());
+        for (var template : templates) {
+            if (name.equals(template.get("name").asText())) {
+                return template.get("id").asLong();
+            }
+        }
+        throw new IllegalStateException("No template " + name);
+    }
+
     private String newTicket(String title) throws Exception {
         return mapper.readTree(mvc.perform(post("/api/projects/HIS/tickets")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -97,14 +114,14 @@ class TicketStatusHistoryApiTest {
     void logsWhoMovedTheTicketAndBetweenWhichBuckets() throws Exception {
         String ticket = newTicket("Tracks its own moves");
 
-        move(ticket, "TODO", moverToken);
+        move(ticket, "To Do", moverToken);
 
         mvc.perform(get("/api/tickets/" + ticket + "/history")
                         .header("Authorization", "Bearer " + adminToken))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.length()").value(1))
-                .andExpect(jsonPath("$[0].fromStatus").value("BACKLOG"))
-                .andExpect(jsonPath("$[0].toStatus").value("TODO"))
+                .andExpect(jsonPath("$[0].fromStatus").value("Backlog"))
+                .andExpect(jsonPath("$[0].toStatus").value("To Do"))
                 .andExpect(jsonPath("$[0].movedBy.displayName").value("Xyz Mover"))
                 .andExpect(jsonPath("$[0].movedAt").isNotEmpty())
                 .andExpect(jsonPath("$[0].summary").value("moved from Backlog to To Do by Xyz Mover"));
@@ -114,10 +131,10 @@ class TicketStatusHistoryApiTest {
     void keepsTheWholeTrailInOrderWithTheLastMoverLast() throws Exception {
         String ticket = newTicket("Moves several times");
 
-        move(ticket, "TODO", adminToken);
-        move(ticket, "IN_PROGRESS", moverToken);
-        move(ticket, "IN_REVIEW", adminToken);
-        move(ticket, "DONE", moverToken);
+        move(ticket, "To Do", adminToken);
+        move(ticket, "In Progress", moverToken);
+        move(ticket, "In Review", adminToken);
+        move(ticket, "Done", moverToken);
 
         mvc.perform(get("/api/tickets/" + ticket + "/history")
                         .header("Authorization", "Bearer " + adminToken))
@@ -128,7 +145,7 @@ class TicketStatusHistoryApiTest {
                 .andExpect(jsonPath("$[2].summary").value("moved from In Progress to In Review by Olivia Owner"))
                 // The last entry is the last person who moved it.
                 .andExpect(jsonPath("$[3].summary").value("moved from In Review to Done by Xyz Mover"))
-                .andExpect(jsonPath("$[3].toStatus").value("DONE"));
+                .andExpect(jsonPath("$[3].toStatus").value("Done"));
     }
 
     @Test
@@ -138,7 +155,7 @@ class TicketStatusHistoryApiTest {
         mvc.perform(patch("/api/tickets/" + ticket)
                         .contentType(MediaType.APPLICATION_JSON)
                         .header("Authorization", "Bearer " + moverToken)
-                        .content("{\"status\":\"IN_PROGRESS\",\"priority\":\"HIGH\"}"))
+                        .content("{\"status\":\"In Progress\",\"priority\":\"HIGH\"}"))
                 .andExpect(status().isOk());
 
         mvc.perform(get("/api/tickets/" + ticket + "/history")
@@ -153,11 +170,11 @@ class TicketStatusHistoryApiTest {
         String ticket = newTicket("Stays put");
 
         // Same bucket it is already in, twice, plus an unrelated edit.
-        move(ticket, "BACKLOG", moverToken);
+        move(ticket, "Backlog", moverToken);
         mvc.perform(patch("/api/tickets/" + ticket)
                         .contentType(MediaType.APPLICATION_JSON)
                         .header("Authorization", "Bearer " + moverToken)
-                        .content("{\"status\":\"BACKLOG\",\"title\":\"Renamed but not moved\"}"))
+                        .content("{\"status\":\"Backlog\",\"title\":\"Renamed but not moved\"}"))
                 .andExpect(status().isOk());
 
         mvc.perform(get("/api/tickets/" + ticket + "/history")
@@ -169,7 +186,7 @@ class TicketStatusHistoryApiTest {
     @Test
     void historyFollowsProjectVisibility() throws Exception {
         String ticket = newTicket("Private history");
-        move(ticket, "TODO", adminToken);
+        move(ticket, "To Do", adminToken);
 
         // Someone with an account but no membership of this project.
         mvc.perform(post("/api/admin/users")

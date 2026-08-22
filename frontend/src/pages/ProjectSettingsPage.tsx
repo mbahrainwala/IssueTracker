@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { ApiError, api } from '../api/client'
+import { ApiError, api, type LaneInput } from '../api/client'
 import type { Member, Project, ProjectRole, User } from '../api/types'
 import { PROJECT_ROLES } from '../api/types'
 import AuthImage from '../components/AuthImage'
+import LaneEditor, { toLaneInputs } from '../components/LaneEditor'
 import Avatar from '../components/Avatar'
 import FormattedTextarea from '../components/FormattedTextarea'
 import { formatDateTime } from '../format'
@@ -14,6 +15,7 @@ export default function ProjectSettingsPage() {
 
   const [project, setProject] = useState<Project | null>(null)
   const imageInput = useRef<HTMLInputElement>(null)
+  const [laneDraft, setLaneDraft] = useState<LaneInput[]>([])
   const [members, setMembers] = useState<Member[]>([])
   const [allUsers, setAllUsers] = useState<User[]>([])
   const [error, setError] = useState<string | null>(null)
@@ -38,6 +40,7 @@ export default function ProjectSettingsPage() {
       setDescription(p.description ?? '')
       setMembers(m)
       setAllUsers(users)
+      setLaneDraft(toLaneInputs([...p.lanes].sort((a, b) => a.order - b.order)))
       setError(null)
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Failed to load project')
@@ -115,6 +118,18 @@ export default function ProjectSettingsPage() {
       await reload()
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Could not restore project')
+    }
+  }
+
+  async function saveLanes() {
+    setStatus(null)
+    try {
+      await api.setLanes(projectKey, laneDraft)
+      setStatus('Board saved.')
+      setError(null)
+      await reload()
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not save the board')
     }
   }
 
@@ -271,6 +286,20 @@ export default function ProjectSettingsPage() {
             </button>
           </>
         )}
+      </div>
+
+      <div className="card">
+        <h2>Board</h2>
+        <p className="muted">
+          The swim lanes tickets move between{project.templateName ? `, started from the ${project.templateName} template` : ''}.
+          A lane can only be removed once it is empty.
+        </p>
+        <LaneEditor lanes={laneDraft} onChange={setLaneDraft} disabled={project.archived} />
+        <div className="form-actions">
+          <button className="btn btn-primary" disabled={project.archived} onClick={saveLanes}>
+            Save board
+          </button>
+        </div>
       </div>
 
       <div className="card">

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { ApiError, api } from '../api/client'
-import type { EpicRef, Ticket, TicketStatus, User } from '../api/types'
-import { STATUS_LABELS, TICKET_PRIORITIES, TICKET_STATUSES, TICKET_TYPES } from '../api/types'
+import type { EpicRef, Lane, Ticket, TicketStatus, User } from '../api/types'
+import { TICKET_PRIORITIES, TICKET_TYPES } from '../api/types'
 import FormattedTextarea from './FormattedTextarea'
 import Modal from './Modal'
 
@@ -11,22 +11,28 @@ import Modal from './Modal'
  */
 export default function CreateTicketModal({
   projectKey,
+  lanes,
   members,
   fixedEpicKey,
   onClose,
   onCreated,
 }: {
   projectKey: string
+  /** The project's board. Empty until it loads; the picker then defaults to its first lane. */
+  lanes: Lane[]
   members?: User[]
   fixedEpicKey?: string
   onClose: () => void
   onCreated: () => void
 }) {
+  // Where new tickets belong is the board's decision, not this dialog's.
+  const startingLane = lanes.find((lane) => lane.initial)?.name ?? lanes[0]?.name ?? ''
+
   const [form, setForm] = useState({
     title: '',
     description: '',
     type: 'TASK',
-    status: 'BACKLOG',
+    status: '',
     priority: 'MEDIUM',
     assigneeId: '' as number | '',
     epicKey: '',
@@ -64,7 +70,7 @@ export default function CreateTicketModal({
         title: form.title,
         description: form.description || undefined,
         type: form.type as Ticket['type'],
-        status: form.status as TicketStatus,
+        status: (form.status || startingLane) as TicketStatus,
         priority: form.priority as Ticket['priority'],
         assigneeId: form.assigneeId === '' ? null : form.assigneeId,
         // An epic never sits inside another epic.
@@ -117,10 +123,13 @@ export default function CreateTicketModal({
           </label>
           <label>
             Status
-            <select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}>
-              {TICKET_STATUSES.map((s) => (
-                <option key={s} value={s}>
-                  {STATUS_LABELS[s]}
+            <select
+              value={form.status || startingLane}
+              onChange={(e) => setForm({ ...form, status: e.target.value })}
+            >
+              {lanes.map((lane) => (
+                <option key={lane.id} value={lane.name}>
+                  {lane.name}
                 </option>
               ))}
             </select>

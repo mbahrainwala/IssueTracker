@@ -192,7 +192,9 @@ must be empty before it can be deleted.
 
 ### Tickets
 
-Archive from the ticket page; the button is disabled unless the ticket is in **Done**.
+Archive from the ticket page; the button is disabled unless the ticket sits in the board's
+**finished lane** — which lane that is comes from the project's own board, see
+[Boards, swim lanes and templates](#boards-swim-lanes-and-templates).
 
 Each project's board has a third tab, **Archived**, listing what has been archived with when and
 by whom, and a **Restore** action. The board and list tabs never show archived tickets, and the
@@ -229,8 +231,9 @@ The project card's ticket count always excludes archived tickets.
 
 ## Status history
 
-Every move between board buckets is logged with **who** moved it, **from** which bucket, **to**
-which, and **when** — whether it came from a board drag, the sidebar dropdown, or a `PATCH`:
+Every move between lanes is logged with **who** moved it, **from** which lane, **to** which, and
+**when** — whether it came from a board drag, the sidebar dropdown, or a `PATCH`. Lane names are
+stored as a **snapshot**, so a lane that is later renamed or removed does not rewrite history:
 
 ```
 moved from Backlog to To Do by Alice Nguyen on 20 Aug 2026 at 23:14
@@ -361,6 +364,117 @@ never rows, so the worst a bug here could do is remove a file that was about to 
 > If you run more than one instance against the same store, they will all sweep. That is
 > harmless — the work is idempotent and each file is judged against the same shared database —
 > but set `ATTACHMENT_SWEEP_CRON=-` on all but one if you would rather it ran once.
+
+## Boards, swim lanes and templates
+
+**A board belongs to its project.** The lanes tickets move between are per-project data, copied
+from a template when the project is created — along with any [starter tickets](#starter-tickets)
+that template prescribes — not a fixed set baked into the app. A law firm
+tracking matters, a team shipping software and somebody planning a holiday get boards that have
+nothing in common:
+
+| Template | Lanes |
+|---|---|
+| **Kanban** *(default)* | To Do → In Progress → Done |
+| **Software Development** | Backlog → To Do → In Progress → In Review → Done |
+| **Legal Case** | Intake → Discovery → Filings Due → Awaiting Hearing → Closed |
+| **Trip Planning** | Ideas → Researching → Booked → Packed → Done |
+| **Recruitment** | Applied → Screening → Interviewing → Offer → Decided |
+
+Those five ship with the app. **Only an administrator can define new ones**, from **Templates**
+in the top nav (`/admin/templates`) — a template shapes how everybody else's projects begin, so
+it is an installation-wide decision rather than a per-project one. Reading them is open to any
+signed-in user, because the create-project dialog offers them and previews their lanes.
+
+### The lane's name *is* the ticket's status
+
+There is no hidden code behind a display label: a lane called `Awaiting Hearing` means its
+tickets literally hold `"Awaiting Hearing"`. That keeps the data legible, lets a template invent
+any lane it likes, and means the status-history table — which already stored text — stays
+readable years later without a lookup table.
+
+It has one consequence worth stating: **renaming a lane rewrites its tickets**, in the same
+transaction. That is handled for you, but it is why a rename is not a free operation.
+
+### Every board needs a start and a finish
+
+Exactly one lane is the **starting lane** (where new tickets appear) and exactly one is the
+**finished lane**. Without them, "where does a new ticket go?" and "what may be archived?" have
+no answer. Submitting a board with none or two of either is refused with `400`.
+
+This is what replaced the old hardcoded `DONE`: **archiving now keys off whichever lane the
+board marks as finished**. On a Legal Case project you archive from `Closed`, and the refusal
+message says so.
+
+### Editing a board in use
+
+A lead or administrator can reshape a project's board from **Settings → Board**: rename, reorder,
+add and remove lanes, and move the start/finish markers. The whole board is submitted at once,
+because a board is edited as a shape — reordering is just the same lanes in a different sequence.
+
+- **Renaming** a lane carries its tickets with it.
+- **Removing** a lane requires it to be empty first (`409` naming how many tickets are in the
+  way). Silently moving somebody's tickets elsewhere would be worse than refusing.
+- **Adding** a lane is just a new entry with no id.
+
+> **Why lanes are matched by id, not by position**
+>
+> The submission carries each existing lane's id. Without it the server could only match by
+> position, and dropping a lane from the middle of the board would read as a chain of renames —
+> quietly dragging every ticket one lane to the left. A lane whose id is absent is being
+> removed; a lane that keeps its id and changes its name is a rename. This was caught by a test
+> that expected `409` and got `400`.
+
+### Starter tickets
+
+A template can also carry the **work this kind of project always begins with**, created in
+every project made from it. A blank board is a poor start for repeatable work: a legal matter
+always opens with a conflict check, a trip always needs somewhere to keep the booking
+confirmations. Those are properties of the *kind* of project — which is what a template is.
+
+| Template | Starts every project with |
+|---|---|
+| **Kanban** | *(nothing — it is the "nothing more specific fits" board)* |
+| **Software Development** | Set up the repository and CI · Agree the definition of done · Write the first release notes |
+| **Legal Case** | Run the conflict check · Engagement letter signed and filed · Client documents · Key dates and limitation period |
+| **Trip Planning** | **Travel documents** · Check passports and visas · Book transport · Book accommodation · Packing list |
+| **Recruitment** | Write the job description · Agree the interview loop · Agree the scorecard |
+
+Each starter carries a title, an optional description, a type, a priority, and **which lane it
+lands in** — so a legal matter's tickets appear in `Intake` and a trip's in `Ideas`. A starter
+naming no lane goes to the board's starting lane.
+
+Creating `JAPAN` from **Trip Planning** produces `JAPAN-1 Travel documents` in `Ideas`, and
+booking confirmations get [attached](#attachments) to it as they arrive — one place for the
+whole trip's paperwork.
+
+**They are ordinary tickets from the moment they exist**: numbered in the project's own
+sequence, reported by whoever created the project, and edited, moved, archived or deleted like
+any other. Nothing marks them as special afterwards.
+
+> A starter ticket that names a lane the *template* does not have is refused when the template
+> is saved — it almost always means a lane was renamed and the ticket was left pointing at the
+> old name. At project-creation time the same mismatch is treated more gently: the ticket falls
+> back to the starting lane rather than failing the whole creation, because a half-made project
+> would be worse than a ticket one column to the left.
+
+Starter tickets do not currently nest — a template can create an `EPIC`, but not children
+filed under it.
+
+### Templates are a starting point, not a binding
+
+Creating a project **copies** the template's lanes and creates its starter tickets. Editing the
+template afterwards never reaches back into projects already made from it, so improving a
+template cannot rearrange a board somebody is working on, nor add tickets to it weeks later. A project remembers which template it came from for display only;
+deleting that template forgets the label rather than blocking on projects that have long since
+diverged. Built-in templates can be edited but not deleted, so the list is never empty.
+
+### Upgrading an existing installation
+
+`V12` migrates in place. Every project that already exists keeps **exactly** the board it had —
+the old five buckets become five lanes on that project — and existing tickets and their history
+are rewritten from enum spellings to lane names (`IN_PROGRESS` → `In Progress`). Nothing is lost
+and no board changes shape. New projects created without naming a template get **Kanban**.
 
 ## Project images
 
@@ -650,6 +764,12 @@ All routes require `Authorization: Bearer <token>` except `/api/auth/register` a
 | `GET`    | `/api/projects/{key}`                   | Project detail                   |
 | `PUT`    | `/api/projects/{key}`                   | Update a project                 |
 | `DELETE` | `/api/projects/{key}`                   | Delete a project (must be empty) |
+| `GET`    | `/api/templates`                        | Project templates (any user)     |
+| `POST`   | `/api/templates`                        | Define a template (`ADMIN`)      |
+| `PUT`    | `/api/templates/{id}`                   | Edit a template (`ADMIN`)        |
+| `DELETE` | `/api/templates/{id}`                   | Delete a template (`ADMIN`, not built-in) |
+| `GET`    | `/api/projects/{key}/lanes`             | The project's swim lanes         |
+| `PUT`    | `/api/projects/{key}/lanes`             | Replace the board (`LEAD`/`ADMIN`) |
 | `GET`    | `/api/projects/{key}/image`             | Project image (members only)     |
 | `PUT`    | `/api/projects/{key}/image`             | Set the image (`LEAD`/`ADMIN`)   |
 | `DELETE` | `/api/projects/{key}/image`             | Remove the image                 |
@@ -699,15 +819,19 @@ stability guarantee, and logs a warning on every paged request.
 
 - **Projects** — grid of the projects you can see, with **Active** and **Archived** tabs and a
   create dialog that suggests a key from the name.
-- **Board** — five columns (Backlog → To Do → In Progress → In Review → Done) with drag-and-drop
+- **Board** — one column per swim lane, in the project's own order, with drag-and-drop
   transitions that update optimistically and roll back if the server rejects the move. Toggle to
   a table view or the **Archived** tab; filter by assignee or search by title/key.
 - **Ticket** — inline title/description editing, status/type/priority/assignee/epic/points/due
   date in the sidebar, status history, linked tickets, and threaded comments.
-- **Settings** — project details, lead, membership and roles, and project deletion.
+- **Settings** — project details, the **board** (rename, reorder, add and remove lanes),
+  the project image, membership and roles, and project deletion.
 - **Users** (admins only, in the top nav) — the admin dashboard: create accounts, edit
   name/email/role, reset passwords, and enable/disable accounts, with search and a
   "show disabled" filter.
+- **Templates** (admins only) — define the boards new projects start from, and the tickets
+  they start with.
+- **Branding** (admins only) — company name and logo for the title bar.
 
 Light and dark themes follow the OS preference.
 

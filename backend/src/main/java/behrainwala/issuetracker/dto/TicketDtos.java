@@ -2,7 +2,6 @@ package behrainwala.issuetracker.dto;
 
 import behrainwala.issuetracker.domain.Ticket;
 import behrainwala.issuetracker.domain.TicketPriority;
-import behrainwala.issuetracker.domain.TicketStatus;
 import behrainwala.issuetracker.domain.TicketType;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
@@ -21,7 +20,7 @@ public final class TicketDtos {
             @NotBlank @Size(max = 255) String title,
             @Size(max = 4000) String description,
             TicketType type,
-            TicketStatus status,
+            String status,
             TicketPriority priority,
             Long assigneeId,
             Integer storyPoints,
@@ -34,7 +33,7 @@ public final class TicketDtos {
             @Size(max = 255) String title,
             @Size(max = 4000) String description,
             TicketType type,
-            TicketStatus status,
+            String status,
             TicketPriority priority,
             Long assigneeId,
             boolean clearAssignee,
@@ -65,7 +64,7 @@ public final class TicketDtos {
             String title,
             String description,
             TicketType type,
-            TicketStatus status,
+            String status,
             TicketPriority priority,
             UserDto reporter,
             UserDto assignee,

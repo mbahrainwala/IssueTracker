@@ -83,7 +83,7 @@ class ArchiveReadOnlyApiTest {
     }
 
     private void archiveTicket(String key) throws Exception {
-        mvc.perform(patch("/api/tickets/" + key + "/status").param("status", "DONE")
+        mvc.perform(patch("/api/tickets/" + key + "/status").param("status", "Done")
                 .header("Authorization", "Bearer " + token)).andExpect(status().isOk());
         mvc.perform(post("/api/tickets/" + key + "/archive")
                 .header("Authorization", "Bearer " + token)).andExpect(status().isOk());

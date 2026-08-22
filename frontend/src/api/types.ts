@@ -2,20 +2,17 @@ export type Role = 'ADMIN' | 'USER'
 export type ProjectRole = 'LEAD' | 'MEMBER' | 'VIEWER'
 export type TicketType = 'STORY' | 'TASK' | 'BUG' | 'EPIC'
 export type TicketPriority = 'LOWEST' | 'LOW' | 'MEDIUM' | 'HIGH' | 'HIGHEST'
-export type TicketStatus = 'BACKLOG' | 'TODO' | 'IN_PROGRESS' | 'IN_REVIEW' | 'DONE'
+/**
+ * A swim lane's name, which is also the value a ticket carries. Lanes are configured per
+ * project from a template, so this is an open string rather than a fixed union - the set of
+ * valid values lives on the project, in `Project.lanes`.
+ */
+export type TicketStatus = string
 
-export const TICKET_STATUSES: TicketStatus[] = ['BACKLOG', 'TODO', 'IN_PROGRESS', 'IN_REVIEW', 'DONE']
 export const TICKET_TYPES: TicketType[] = ['STORY', 'TASK', 'BUG', 'EPIC']
 export const TICKET_PRIORITIES: TicketPriority[] = ['LOWEST', 'LOW', 'MEDIUM', 'HIGH', 'HIGHEST']
 export const PROJECT_ROLES: ProjectRole[] = ['LEAD', 'MEMBER', 'VIEWER']
 
-export const STATUS_LABELS: Record<TicketStatus, string> = {
-  BACKLOG: 'Backlog',
-  TODO: 'To Do',
-  IN_PROGRESS: 'In Progress',
-  IN_REVIEW: 'In Review',
-  DONE: 'Done',
-}
 
 export interface User {
   id: number
@@ -39,6 +36,10 @@ export interface Project {
   archived: boolean
   archivedAt: string | null
   archivedBy: User | null
+  /** The project's swim lanes, left to right. */
+  lanes: Lane[]
+  /** The template this board started from, for display. */
+  templateName: string | null
   /** Optional project picture; false when none has been uploaded. */
   hasImage: boolean
   /** Last-updated stamp, appended to the image URL so a replacement is not served stale. */
@@ -136,6 +137,41 @@ export interface StatusChange {
   movedAt: string
   /** Server-rendered sentence, e.g. "moved from Backlog to To Do by Alice Nguyen". */
   summary: string
+}
+
+/** One swim lane on a project's board, or in a template. */
+export interface Lane {
+  id: number
+  name: string
+  order: number
+  /** Where newly created tickets land. Exactly one lane per board. */
+  initial: boolean
+  /** Finished work: the only lane tickets can be archived from. Exactly one per board. */
+  done: boolean
+}
+
+/** A ticket every project made from a template starts with. */
+export interface StarterTicket {
+  id: number
+  title: string
+  description: string | null
+  type: TicketType
+  priority: TicketPriority
+  /** Which lane it lands in; null means the board's starting lane. */
+  lane: string | null
+}
+
+/** A reusable board blueprint. Admins define them; anyone can start a project from one. */
+export interface Template {
+  id: number
+  name: string
+  description: string | null
+  /** Ships with the app: editable, but not deletable. */
+  builtIn: boolean
+  lanes: Lane[]
+  /** The work every project of this kind begins with. May be empty. */
+  starterTickets: StarterTicket[]
+  createdAt: string
 }
 
 export interface Branding {

@@ -74,10 +74,10 @@ class IssueTrackerApiTest {
     @Order(4)
     void transitionsAndCommentsOnATicket() throws Exception {
         mvc.perform(patch("/api/tickets/PROJ1-1/status")
-                        .param("status", "IN_PROGRESS")
+                        .param("status", "In Progress")
                         .header("Authorization", "Bearer " + token))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.status").value("IN_PROGRESS"));
+                .andExpect(jsonPath("$.status").value("In Progress"));
 
         mvc.perform(post("/api/tickets/PROJ1-1/comments")
                         .contentType(MediaType.APPLICATION_JSON)

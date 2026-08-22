@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { ApiError, api } from '../api/client'
 import type { Project, Ticket, TicketStatus, User } from '../api/types'
-import { STATUS_LABELS, TICKET_STATUSES } from '../api/types'
+
 import Avatar from '../components/Avatar'
 import AuthImage from '../components/AuthImage'
 import CreateTicketModal from '../components/CreateTicketModal'
@@ -73,13 +73,19 @@ export default function ProjectBoardPage() {
     return () => clearTimeout(handle)
   }, [loadTickets])
 
+  // Columns come from the project's own lanes, so the board is whatever the template (or a
+  // later edit) says it is. A ticket whose lane has since been renamed away simply has no
+  // column and shows up in the list view instead of vanishing without trace.
+  const lanes = useMemo(
+    () => [...(project?.lanes ?? [])].sort((a, b) => a.order - b.order),
+    [project],
+  )
+
   const byStatus = useMemo(() => {
-    const groups: Record<TicketStatus, Ticket[]> = {
-      BACKLOG: [], TODO: [], IN_PROGRESS: [], IN_REVIEW: [], DONE: [],
-    }
-    for (const ticket of tickets) groups[ticket.status].push(ticket)
+    const groups = new Map<string, Ticket[]>(lanes.map((lane) => [lane.name, []]))
+    for (const ticket of tickets) groups.get(ticket.status)?.push(ticket)
     return groups
-  }, [tickets])
+  }, [tickets, lanes])
 
   async function moveTicket(ticketKey: string, status: TicketStatus) {
     // The API refuses moves in an archived project; do not even pretend locally.
@@ -176,12 +182,12 @@ export default function ProjectBoardPage() {
 
       {view === 'board' && (
         <div className="board">
-          {TICKET_STATUSES.map((status) => (
+          {lanes.map((lane) => (
             <BoardColumn
-              key={status}
-              status={status}
-              tickets={byStatus[status]}
-              onDropTicket={(ticketKey) => moveTicket(ticketKey, status)}
+              key={lane.id}
+              status={lane.name}
+              tickets={byStatus.get(lane.name) ?? []}
+              onDropTicket={(ticketKey) => moveTicket(ticketKey, lane.name)}
             />
           ))}
         </div>
@@ -192,6 +198,7 @@ export default function ProjectBoardPage() {
       {creating && (
         <CreateTicketModal
           projectKey={project.projectKey}
+          lanes={lanes}
           members={members}
           onClose={() => setCreating(false)}
           onCreated={() => {
@@ -231,7 +238,7 @@ function BoardColumn({
       }}
     >
       <header className="column-head">
-        <span>{STATUS_LABELS[status]}</span>
+        <span>{status}</span>
         <span className="count">{tickets.length}</span>
       </header>
       <div className="column-body">
@@ -353,7 +360,7 @@ function TicketTable({ tickets }: { tickets: Ticket[] }) {
               <td>
                 <Link to={`/tickets/${ticket.ticketKey}`}>{ticket.title}</Link>
               </td>
-              <td><span className="status-pill">{STATUS_LABELS[ticket.status]}</span></td>
+              <td><span className="status-pill">{ticket.status}</span></td>
               <td><PriorityBadge priority={ticket.priority} /> {ticket.priority}</td>
               <td className="cell-user">
                 <Avatar user={ticket.assignee} size={22} />

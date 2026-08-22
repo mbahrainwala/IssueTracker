@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { ApiError, api } from '../api/client'
-import type { Comment, EpicRef, Member, Ticket, TicketPriority, TicketStatus, TicketType } from '../api/types'
-import { STATUS_LABELS, TICKET_PRIORITIES, TICKET_STATUSES, TICKET_TYPES } from '../api/types'
+import type { Comment, EpicRef, Lane, Member, Ticket, TicketPriority, TicketStatus, TicketType } from '../api/types'
+import { TICKET_PRIORITIES, TICKET_TYPES } from '../api/types'
 import Attachments from '../components/Attachments'
 import Avatar from '../components/Avatar'
 import { PriorityBadge, TypeBadge } from '../components/Badges'
@@ -26,6 +26,8 @@ export default function TicketPage() {
   const [loading, setLoading] = useState(true)
 
   const [epics, setEpics] = useState<EpicRef[]>([])
+  /** The lanes of this ticket's project - the status picker's options come from the board. */
+  const [lanes, setLanes] = useState<Lane[]>([])
   /** Bumped after an edit so the epic's child list refetches. */
   const [childrenToken, setChildrenToken] = useState(0)
   /** Only a status change adds a history row, so only that refetches the trail. */
@@ -45,15 +47,17 @@ export default function TicketPage() {
         setTicket(t)
         setDraftTitle(t.title)
         setDraftDescription(t.description ?? '')
-        const [c, m, e] = await Promise.all([
+        const [c, m, e, p] = await Promise.all([
           api.listComments(ticketKey),
           api.listMembers(t.projectKey),
           api.listEpics(t.projectKey),
+          api.getProject(t.projectKey),
         ])
         if (cancelled) return
         setComments(c)
         setMembers(m)
         setEpics(e)
+        setLanes([...p.lanes].sort((a, b) => a.order - b.order))
       })
       .catch((err) => setError(err instanceof ApiError ? err.message : 'Failed to load ticket'))
       .finally(() => !cancelled && setLoading(false))
@@ -135,6 +139,8 @@ export default function TicketPage() {
   if (loading) return <p className="muted">Loading…</p>
   if (!ticket) return <p className="error">{error ?? 'Ticket not found'}</p>
 
+  const doneLane = lanes.find((lane) => lane.done)?.name ?? null
+
   return (
     <div className="page">
       <div className="breadcrumb">
@@ -164,11 +170,12 @@ export default function TicketPage() {
               <button
                 className="btn btn-ghost"
                 onClick={archive}
-                disabled={ticket.status !== 'DONE'}
+                // Which lane counts as finished is the board's decision, not a constant.
+                disabled={Boolean(doneLane) && ticket.status !== doneLane}
                 title={
-                  ticket.status === 'DONE'
+                  !doneLane || ticket.status === doneLane
                     ? 'Archive this finished ticket'
-                    : 'Only tickets in Done can be archived'
+                    : `Only tickets in ${doneLane} can be archived`
                 }
               >
                 Archive
@@ -238,6 +245,7 @@ export default function TicketPage() {
             <EpicChildren
               epicKey={ticket.ticketKey}
               projectKey={ticket.projectKey}
+              lanes={lanes}
               archived={ticket.archived}
               refreshToken={childrenToken}
             />
@@ -299,9 +307,9 @@ export default function TicketPage() {
               value={ticket.status}
               onChange={(e) => patch({ status: e.target.value as TicketStatus })}
             >
-              {TICKET_STATUSES.map((s) => (
-                <option key={s} value={s}>
-                  {STATUS_LABELS[s]}
+              {lanes.map((lane) => (
+                <option key={lane.id} value={lane.name}>
+                  {lane.name}
                 </option>
               ))}
             </select>

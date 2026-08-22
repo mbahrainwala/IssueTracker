@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ApiError, api } from '../api/client'
 import type { LinkType, LinkedTicket, TicketLink } from '../api/types'
-import { LINK_TYPES, STATUS_LABELS } from '../api/types'
+import { LINK_TYPES } from '../api/types'
 import Avatar from './Avatar'
 import { PriorityBadge, TypeBadge } from './Badges'
 
@@ -84,7 +84,7 @@ export default function TicketLinks({ ticketKey }: { ticketKey: string }) {
               </Link>
               <span className="spacer" />
               <PriorityBadge priority={link.ticket.priority} />
-              <span className="status-pill">{STATUS_LABELS[link.ticket.status]}</span>
+              <span className="status-pill">{link.ticket.status}</span>
               <Avatar user={link.ticket.assignee} size={22} />
               <button className="link-button" onClick={() => remove(link.id)} title="Remove link">
                 ✕
@@ -192,7 +192,7 @@ function AddLinkForm({
                 <TypeBadge type={ticket.type} />
                 <span className="ticket-key">{ticket.ticketKey}</span>
                 <span className="typeahead-title">{ticket.title}</span>
-                <span className="status-pill">{STATUS_LABELS[ticket.status]}</span>
+                <span className="status-pill">{ticket.status}</span>
               </button>
             </li>
           ))}

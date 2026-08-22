@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ApiError, api } from '../api/client'
-import type { Ticket } from '../api/types'
-import { STATUS_LABELS } from '../api/types'
+import type { Lane, Ticket } from '../api/types'
 import Avatar from './Avatar'
 import { PriorityBadge, TypeBadge } from './Badges'
 import CreateTicketModal from './CreateTicketModal'
@@ -11,11 +10,14 @@ import CreateTicketModal from './CreateTicketModal'
 export default function EpicChildren({
   epicKey,
   projectKey,
+  lanes,
   archived,
   refreshToken,
 }: {
   epicKey: string
   projectKey: string
+  /** The project's board, handed to the create-ticket dialog. */
+  lanes: Lane[]
   /** An archived epic is frozen; its list becomes read-only. */
   archived: boolean
   refreshToken: number
@@ -121,7 +123,7 @@ export default function EpicChildren({
                 </Link>
                 <span className="spacer" />
                 <PriorityBadge priority={child.priority} />
-                <span className="status-pill">{STATUS_LABELS[child.status]}</span>
+                <span className="status-pill">{child.status}</span>
                 <Avatar user={child.assignee} size={22} />
                 {child.archived && <span className="badge">archived</span>}
                 {!archived && !child.archived && (
@@ -142,6 +144,7 @@ export default function EpicChildren({
       {creating && (
         <CreateTicketModal
           projectKey={projectKey}
+          lanes={lanes}
           fixedEpicKey={epicKey}
           onClose={() => setCreating(false)}
           onCreated={() => {
@@ -247,7 +250,7 @@ function AddChildrenPanel({
                   in {ticket.epic.ticketKey}
                 </span>
               )}
-              <span className="status-pill">{STATUS_LABELS[ticket.status]}</span>
+              <span className="status-pill">{ticket.status}</span>
             </li>
           ))}
         </ul>

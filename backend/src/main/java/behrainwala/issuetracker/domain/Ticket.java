@@ -44,9 +44,13 @@ public class Ticket extends Auditable {
     @Column(nullable = false, length = 20)
     private TicketType type = TicketType.TASK;
 
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 20)
-    private TicketStatus status = TicketStatus.BACKLOG;
+    /**
+     * The name of the project lane this ticket sits in. Free text rather than an enum: the
+     * board is per-project now, so the set of valid values is a query, not a compile-time
+     * constant. TicketService checks it against the project's lanes on every write.
+     */
+    @Column(nullable = false, length = 60)
+    private String status;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
@@ -133,11 +137,11 @@ public class Ticket extends Auditable {
         this.type = type;
     }
 
-    public TicketStatus getStatus() {
+    public String getStatus() {
         return status;
     }
 
-    public void setStatus(TicketStatus status) {
+    public void setStatus(String status) {
         this.status = status;
     }
 

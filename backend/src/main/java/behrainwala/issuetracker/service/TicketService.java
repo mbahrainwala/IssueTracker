@@ -3,7 +3,6 @@ package behrainwala.issuetracker.service;
 import behrainwala.issuetracker.domain.Project;
 import behrainwala.issuetracker.domain.Ticket;
 import behrainwala.issuetracker.domain.TicketPriority;
-import behrainwala.issuetracker.domain.TicketStatus;
 import behrainwala.issuetracker.domain.TicketType;
 import behrainwala.issuetracker.domain.TicketStatusChange;
 import behrainwala.issuetracker.domain.User;
@@ -34,6 +33,7 @@ public class TicketService {
     private final TicketRepository ticketRepository;
     private final ProjectRepository projectRepository;
     private final TicketStatusChangeRepository statusChangeRepository;
+    private final WorkflowService workflow;
     private final AttachmentRepository attachmentRepository;
     private final AttachmentStorage attachmentStorage;
     private final ProjectService projectService;
@@ -43,6 +43,7 @@ public class TicketService {
     public TicketService(TicketRepository ticketRepository,
                          ProjectRepository projectRepository,
                          TicketStatusChangeRepository statusChangeRepository,
+                         WorkflowService workflow,
                          AttachmentRepository attachmentRepository,
                          AttachmentStorage attachmentStorage,
                          ProjectService projectService,
@@ -51,6 +52,7 @@ public class TicketService {
         this.ticketRepository = ticketRepository;
         this.projectRepository = projectRepository;
         this.statusChangeRepository = statusChangeRepository;
+        this.workflow = workflow;
         this.attachmentRepository = attachmentRepository;
         this.attachmentStorage = attachmentStorage;
         this.projectService = projectService;
@@ -59,7 +61,7 @@ public class TicketService {
     }
 
     public Page<TicketDto> list(String projectKey,
-                                TicketStatus status,
+                                String status,
                                 Long assigneeId,
                                 String q,
                                 boolean archived,
@@ -67,15 +69,19 @@ public class TicketService {
                                 User current) {
         Project project = projectService.requireByKey(projectKey);
         accessGuard.requireView(project, current);
-        // The archived tab has no status columns to filter by, so it never narrows on status.
-        String statusName = archived || status == null ? null : status.name();
+        // The archived tab has no lanes to filter by, so it never narrows on status. A lane
+        // the project does not have is a client error, not an empty result set.
+        String statusName = archived || blankToNull(status) == null
+                ? null
+                : workflow.requireLaneName(project, status);
         return ticketRepository
                 .search(project.getId(), archived, statusName, assigneeId, blankToNull(q), pageable)
                 .map(TicketDto::from);
     }
 
     /**
-     * Archives a finished ticket. Only DONE work can be archived, and an epic additionally
+     * Archives a finished ticket. Only work in the project's finished lane can be archived -
+     * which lane that is comes from the board, not from a constant. An epic additionally
      * needs every one of its tickets archived first - otherwise archiving the epic would
      * hide live work behind it.
      */
@@ -87,11 +93,12 @@ public class TicketService {
         if (ticket.isArchived()) {
             throw new ConflictException(ticket.getTicketKey() + " is already archived");
         }
-        if (ticket.getStatus() != TicketStatus.DONE) {
+        // "Finished" is whatever this project's board says it is, not a global constant.
+        if (!workflow.isDone(ticket.getProject(), ticket.getStatus())) {
             throw new ConflictException(
                     "Only tickets in %s can be archived - %s is in %s"
-                            .formatted(TicketStatus.DONE.getLabel(), ticket.getTicketKey(),
-                                    ticket.getStatus().getLabel()));
+                            .formatted(workflow.doneLaneName(ticket.getProject()),
+                                    ticket.getTicketKey(), ticket.getStatus()));
         }
         if (ticket.getType() == TicketType.EPIC) {
             long live = ticketRepository.countByEpicIdAndArchivedAtIsNull(ticket.getId());
@@ -174,7 +181,9 @@ public class TicketService {
         Ticket ticket = new Ticket(locked, locked.nextTicketNumber(), request.title(), current);
         ticket.setDescription(request.description());
         ticket.setType(request.type() == null ? TicketType.TASK : request.type());
-        ticket.setStatus(request.status() == null ? TicketStatus.BACKLOG : request.status());
+        ticket.setStatus(request.status() == null
+                ? workflow.initialLane(locked).getName()
+                : workflow.requireLaneName(locked, request.status()));
         ticket.setPriority(request.priority() == null ? TicketPriority.MEDIUM : request.priority());
         ticket.setStoryPoints(request.storyPoints());
         ticket.setDueDate(request.dueDate());
@@ -325,7 +334,7 @@ public class TicketService {
     }
 
     @Transactional
-    public TicketDto transition(String ticketKey, TicketStatus status, User current) {
+    public TicketDto transition(String ticketKey, String status, User current) {
         Ticket ticket = requireByKey(ticketKey);
         accessGuard.requireWrite(ticket, current);
         recordMove(ticket, status, current);
@@ -336,9 +345,10 @@ public class TicketService {
      * Moves the ticket and logs who did it. A "move" to the status it already has is not a
      * move, so it leaves no entry - otherwise re-saving a form would pollute the history.
      */
-    private void recordMove(Ticket ticket, TicketStatus target, User current) {
-        TicketStatus previous = ticket.getStatus();
-        if (previous == target) {
+    private void recordMove(Ticket ticket, String requested, User current) {
+        String target = workflow.requireLaneName(ticket.getProject(), requested);
+        String previous = ticket.getStatus();
+        if (target.equals(previous)) {
             return;
         }
         ticket.setStatus(target);

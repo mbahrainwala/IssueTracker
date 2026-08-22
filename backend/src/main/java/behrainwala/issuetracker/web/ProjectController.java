@@ -5,6 +5,8 @@ import behrainwala.issuetracker.dto.ProjectDtos.CreateProjectRequest;
 import behrainwala.issuetracker.dto.ProjectDtos.MemberDto;
 import behrainwala.issuetracker.dto.ProjectDtos.ProjectDto;
 import behrainwala.issuetracker.dto.ProjectDtos.UpdateProjectRequest;
+import behrainwala.issuetracker.dto.WorkflowDtos.LaneDto;
+import behrainwala.issuetracker.dto.WorkflowDtos.LanesRequest;
 import behrainwala.issuetracker.service.ProjectService;
 import behrainwala.issuetracker.service.UserService;
 import jakarta.validation.Valid;
@@ -82,6 +84,23 @@ public class ProjectController {
     @GetMapping("/{projectKey}/members")
     public List<MemberDto> members(@PathVariable String projectKey, Authentication auth) {
         return projectService.listMembers(projectKey, userService.currentUser(auth));
+    }
+
+    /** The project's swim lanes, left to right. */
+    @GetMapping("/{projectKey}/lanes")
+    public List<LaneDto> lanes(@PathVariable String projectKey, Authentication auth) {
+        return projectService.lanes(projectKey, userService.currentUser(auth));
+    }
+
+    /**
+     * Replaces the whole board. Sent whole rather than as add/rename/reorder calls because a
+     * board is edited as a shape: the submitted order is the new order.
+     */
+    @PutMapping("/{projectKey}/lanes")
+    public List<LaneDto> setLanes(@PathVariable String projectKey,
+                                  @Valid @RequestBody LanesRequest request,
+                                  Authentication auth) {
+        return projectService.setLanes(projectKey, request, userService.currentUser(auth));
     }
 
     /**

@@ -58,6 +58,11 @@ public class Project extends Auditable {
     @Column(name = "image_updated_at")
     private Instant imageUpdatedAt;
 
+    /** Which template this project's board started from. Display only; lanes are copies. */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "template_id")
+    private ProjectTemplate template;
+
     /** Last issued ticket number for this project; incremented under a row lock. */
     @Column(name = "ticket_seq", nullable = false)
     private long ticketSeq = 0L;
@@ -155,6 +160,14 @@ public class Project extends Auditable {
 
     public Instant getImageUpdatedAt() {
         return imageUpdatedAt;
+    }
+
+    public ProjectTemplate getTemplate() {
+        return template;
+    }
+
+    public void setTemplate(ProjectTemplate template) {
+        this.template = template;
     }
 
     public Instant getArchivedAt() {

@@ -222,7 +222,7 @@ class ContentOwnershipApiTest {
                 .andExpect(status().isCreated())
                 .andReturn().getResponse().getContentAsString()).get("id").asLong();
 
-        mvc.perform(patch("/api/tickets/" + key + "/status").param("status", "DONE")
+        mvc.perform(patch("/api/tickets/" + key + "/status").param("status", "Done")
                 .header("Authorization", "Bearer " + adminToken)).andExpect(status().isOk());
         mvc.perform(post("/api/tickets/" + key + "/archive")
                 .header("Authorization", "Bearer " + adminToken)).andExpect(status().isOk());

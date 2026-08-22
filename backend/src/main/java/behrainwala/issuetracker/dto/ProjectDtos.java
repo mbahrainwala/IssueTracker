@@ -27,6 +27,8 @@ public final class ProjectDtos {
             String projectKey,
             @NotBlank @Size(max = 150) String name,
             @Size(max = 4000) String description,
+            /** Which board to start from. Null takes the default template. */
+            Long templateId,
             List<Long> additionalLeadIds) {
     }
 
@@ -58,12 +60,21 @@ public final class ProjectDtos {
             boolean archived,
             Instant archivedAt,
             UserDto archivedBy,
+            /** The project's swim lanes, left to right - the board is per-project now. */
+            List<WorkflowDtos.LaneDto> lanes,
+            /** The template this board started from, for display. Null if it was deleted. */
+            String templateName,
             boolean hasImage,
             /** Last-updated stamp, appended to the image URL so a replacement is not cached. */
             Long imageVersion,
             Instant createdAt) {
 
         public static ProjectDto from(Project project, long ticketCount) {
+            return from(project, ticketCount, List.of());
+        }
+
+        public static ProjectDto from(Project project, long ticketCount,
+                                      List<WorkflowDtos.LaneDto> lanes) {
             return new ProjectDto(
                     project.getId(),
                     project.getProjectKey(),
@@ -74,6 +85,8 @@ public final class ProjectDtos {
                     project.isArchived(),
                     project.getArchivedAt(),
                     UserDto.from(project.getArchivedBy()),
+                    lanes,
+                    project.getTemplate() == null ? null : project.getTemplate().getName(),
                     project.hasImage(),
                     project.getImageUpdatedAt() == null ? null : project.getImageUpdatedAt().toEpochMilli(),
                     project.getCreatedAt());

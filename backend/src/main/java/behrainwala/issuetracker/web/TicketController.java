@@ -1,6 +1,5 @@
 package behrainwala.issuetracker.web;
 
-import behrainwala.issuetracker.domain.TicketStatus;
 import behrainwala.issuetracker.dto.TicketDtos.AddChildrenRequest;
 import behrainwala.issuetracker.dto.TicketDtos.CreateTicketRequest;
 import behrainwala.issuetracker.dto.TicketDtos.EpicRefDto;
@@ -50,7 +49,7 @@ public class TicketController {
 
     @GetMapping("/projects/{projectKey}/tickets")
     public Page<TicketDto> list(@PathVariable String projectKey,
-                                @RequestParam(required = false) TicketStatus status,
+                                @RequestParam(required = false) String status,
                                 @RequestParam(required = false) Long assigneeId,
                                 @RequestParam(required = false) String q,
                                 @RequestParam(defaultValue = "false") boolean archived,
@@ -165,7 +164,7 @@ public class TicketController {
     /** Board drag-and-drop uses this narrow endpoint instead of a full update. */
     @PatchMapping("/tickets/{ticketKey}/status")
     public TicketDto transition(@PathVariable String ticketKey,
-                                @RequestParam TicketStatus status,
+                                @RequestParam String status,
                                 Authentication auth) {
         return ticketService.transition(ticketKey, status, userService.currentUser(auth));
     }

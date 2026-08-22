@@ -124,7 +124,7 @@ class ProjectArchiveApiTest {
                 .andExpect(status().isConflict());
 
         mvc.perform(patch("/api/tickets/" + ticket + "/status")
-                        .param("status", "TODO")
+                        .param("status", "To Do")
                         .header("Authorization", "Bearer " + token))
                 .andExpect(status().isConflict());
 
@@ -221,7 +221,7 @@ class ProjectArchiveApiTest {
                         "FULL still has 1 ticket, archived included - delete them before deleting the project"));
 
         // Archiving the ticket is not the same as removing it, so the project is still blocked.
-        mvc.perform(patch("/api/tickets/" + key + "/status").param("status", "DONE")
+        mvc.perform(patch("/api/tickets/" + key + "/status").param("status", "Done")
                 .header("Authorization", "Bearer " + token)).andExpect(status().isOk());
         mvc.perform(post("/api/tickets/" + key + "/archive")
                 .header("Authorization", "Bearer " + token)).andExpect(status().isOk());

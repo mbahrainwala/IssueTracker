@@ -28,6 +28,12 @@ export default function Layout({ children }: { children: ReactNode }) {
                   Users
                 </NavLink>
                 <NavLink
+                  to="/admin/templates"
+                  className={({ isActive }) => (isActive ? 'navlink navlink-active' : 'navlink')}
+                >
+                  Templates
+                </NavLink>
+                <NavLink
                   to="/admin/branding"
                   className={({ isActive }) => (isActive ? 'navlink navlink-active' : 'navlink')}
                 >
