@@ -11,11 +11,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.io.IOException;
-import java.io.UncheckedIOException;
-import java.util.Arrays;
-import java.util.Locale;
-import java.util.Map;
 
 /**
  * The company name and logo shown in the title bar.
@@ -28,30 +23,18 @@ import java.util.Map;
 @Transactional(readOnly = true)
 public class BrandingService {
 
-    /** Extension to the type served back. Images only, and nothing is ever run. */
-    private static final Map<String, String> ALLOWED_LOGOS = Map.of(
-            "png", "image/png",
-            "jpg", "image/jpeg",
-            "jpeg", "image/jpeg",
-            "gif", "image/gif",
-            "webp", "image/webp",
-            "svg", "image/svg+xml");
-
-    /** Enough to recognise every signature the executable screen looks for. */
-    private static final int MAGIC_BYTES = 8;
-
     private final BrandingRepository brandingRepository;
     private final BrandingLogoStore logoStore;
-    private final AttachmentPolicy uploadPolicy;
+    private final ImagePolicy imagePolicy;
     private final AppProperties.Branding settings;
 
     public BrandingService(BrandingRepository brandingRepository,
                            BrandingLogoStore logoStore,
-                           AttachmentPolicy uploadPolicy,
+                           ImagePolicy imagePolicy,
                            AppProperties properties) {
         this.brandingRepository = brandingRepository;
         this.logoStore = logoStore;
-        this.uploadPolicy = uploadPolicy;
+        this.imagePolicy = imagePolicy;
         this.settings = properties.getBranding();
     }
 
@@ -86,38 +69,17 @@ public class BrandingService {
         return get();
     }
 
-    /**
-     * Replaces the logo. Images only, screened the same way an attachment is: the extension
-     * must be on the list, and the bytes must not look executable whatever it is called.
-     */
+    /** Replaces the logo. Screened by the shared image policy, same as a project image. */
     @Transactional
     public BrandingDto setLogo(MultipartFile file, User current) {
         Branding branding = requireRow();
-
-        if (file == null || file.isEmpty()) {
-            throw new IllegalArgumentException("The file is empty");
-        }
-        if (file.getSize() > settings.getMaxLogoBytes()) {
-            throw new IllegalArgumentException(
-                    "A logo must be %d KB or smaller".formatted(settings.getMaxLogoBytes() / 1024));
-        }
-
-        String filename = uploadPolicy.sanitizeFilename(file.getOriginalFilename());
-        String extension = extensionOf(filename);
-        String contentType = ALLOWED_LOGOS.get(extension);
-        if (contentType == null) {
-            throw new IllegalArgumentException(
-                    "A logo must be a PNG, JPEG, GIF, WebP or SVG image");
-        }
-
-        byte[] bytes = readAll(file);
-        uploadPolicy.rejectExecutableContent(Arrays.copyOf(bytes, Math.min(bytes.length, MAGIC_BYTES)));
+        ImagePolicy.Image image = imagePolicy.validate(file, settings.getMaxLogoBytes(), "A logo");
 
         // The file is written first: if the metadata update then fails, the transaction rolls
         // back and the row still says there is no logo, leaving an unreferenced file the
         // next upload overwrites. The reverse order would advertise a logo that is not there.
-        logoStore.write(bytes);
-        branding.setLogoMetadata(contentType, filename, current);
+        logoStore.write(image.bytes());
+        branding.setLogoMetadata(image.contentType(), image.filename(), current);
         return get();
     }
 
@@ -137,18 +99,4 @@ public class BrandingService {
                         "The app_branding row is missing - the V9 migration seeds it"));
     }
 
-    private static byte[] readAll(MultipartFile file) {
-        try {
-            return file.getBytes();
-        } catch (IOException e) {
-            throw new UncheckedIOException("Could not read the uploaded logo", e);
-        }
-    }
-
-    private static String extensionOf(String filename) {
-        int dot = filename.lastIndexOf('.');
-        return dot < 0 || dot == filename.length() - 1
-                ? ""
-                : filename.substring(dot + 1).toLowerCase(Locale.ROOT);
-    }
 }

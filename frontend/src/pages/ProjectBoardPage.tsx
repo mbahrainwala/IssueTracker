@@ -4,6 +4,7 @@ import { ApiError, api } from '../api/client'
 import type { Project, Ticket, TicketStatus, User } from '../api/types'
 import { STATUS_LABELS, TICKET_STATUSES } from '../api/types'
 import Avatar from '../components/Avatar'
+import AuthImage from '../components/AuthImage'
 import CreateTicketModal from '../components/CreateTicketModal'
 import RichText from '../components/RichText'
 import { formatDateTime } from '../format'
@@ -104,7 +105,16 @@ export default function ProjectBoardPage() {
           <div className="breadcrumb">
             <Link to="/projects">Projects</Link> <span>/</span> <span>{project.projectKey}</span>
           </div>
-          <h1>{project.name}</h1>
+          <h1 className="project-title">
+            {project.hasImage && (
+              <AuthImage
+                className="project-image-inline"
+                url={api.projectImageUrl(project.projectKey, project.imageVersion)}
+                alt=""
+              />
+            )}
+            {project.name}
+          </h1>
           <p className="muted">
             {project.description ? <RichText text={project.description} /> : 'No description'}
           </p>

@@ -42,7 +42,7 @@ export class ApiError extends Error {
   }
 }
 
-function authHeaders(init: RequestInit = {}): Headers {
+export function authHeaders(init: RequestInit = {}): Headers {
   const headers = new Headers(init.headers)
   const token = getToken()
   if (token) headers.set('Authorization', `Bearer ${token}`)
@@ -180,6 +180,22 @@ export const api = {
     request<Project>(`/projects/${key}`, { method: 'PUT', body: JSON.stringify(body) }),
 
   deleteProject: (key: string) => request<void>(`/projects/${key}`, { method: 'DELETE' }),
+
+  /**
+   * The project image endpoint. Authorised, so this URL goes to AuthImage rather than
+   * straight into an `<img src>`; the version keeps a replacement from being served stale.
+   */
+  projectImageUrl: (key: string, version: number | null) =>
+    `/api/projects/${key}/image${version ? `?v=${version}` : ''}`,
+
+  setProjectImage: (key: string, file: File) => {
+    const form = new FormData()
+    form.append('file', file)
+    return request<Project>(`/projects/${key}/image`, { method: 'PUT', body: form })
+  },
+
+  clearProjectImage: (key: string) =>
+    request<Project>(`/projects/${key}/image`, { method: 'DELETE' }),
 
   listMembers: (key: string) => request<Member[]>(`/projects/${key}/members`),
 

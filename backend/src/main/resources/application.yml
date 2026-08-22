@@ -47,6 +47,10 @@ app:
     # The app refuses to start if it is.
     directory: ${BRANDING_DIR:data/branding}
     max-logo-bytes: ${BRANDING_MAX_LOGO_BYTES:524288}
+  projects:
+    # Same rule as the logo: never inside app.attachments.directory.
+    image-directory: ${PROJECT_IMAGE_DIR:data/project-images}
+    max-image-bytes: ${PROJECT_MAX_IMAGE_BYTES:1048576}
 
 logging:
   level:

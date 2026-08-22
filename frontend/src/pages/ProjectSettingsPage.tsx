@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { ApiError, api } from '../api/client'
 import type { Member, Project, ProjectRole, User } from '../api/types'
 import { PROJECT_ROLES } from '../api/types'
+import AuthImage from '../components/AuthImage'
 import Avatar from '../components/Avatar'
 import FormattedTextarea from '../components/FormattedTextarea'
 import { formatDateTime } from '../format'
@@ -12,6 +13,7 @@ export default function ProjectSettingsPage() {
   const navigate = useNavigate()
 
   const [project, setProject] = useState<Project | null>(null)
+  const imageInput = useRef<HTMLInputElement>(null)
   const [members, setMembers] = useState<Member[]>([])
   const [allUsers, setAllUsers] = useState<User[]>([])
   const [error, setError] = useState<string | null>(null)
@@ -113,6 +115,24 @@ export default function ProjectSettingsPage() {
       await reload()
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Could not restore project')
+    }
+  }
+
+  async function saveImage(file: File) {
+    try {
+      setProject(await api.setProjectImage(projectKey, file))
+      setError(null)
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not upload the image')
+    }
+  }
+
+  async function removeImage() {
+    try {
+      setProject(await api.clearProjectImage(projectKey))
+      setError(null)
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not remove the image')
     }
   }
 
@@ -251,6 +271,49 @@ export default function ProjectSettingsPage() {
             </button>
           </>
         )}
+      </div>
+
+      <div className="card">
+        <h2>Project image</h2>
+        <p className="muted">
+          Optional. Shown on the project tile and beside the project name. PNG, JPEG, GIF, WebP
+          or SVG, up to 1 MB.
+        </p>
+        <div className="logo-preview">
+          {project.hasImage ? (
+            <AuthImage
+              url={api.projectImageUrl(project.projectKey, project.imageVersion)}
+              alt="Current project image"
+            />
+          ) : (
+            <span className="muted">No image set.</span>
+          )}
+        </div>
+        <input
+          ref={imageInput}
+          type="file"
+          accept=".png,.jpg,.jpeg,.gif,.webp,.svg"
+          className="visually-hidden"
+          onChange={(e) => {
+            const file = e.target.files?.[0]
+            if (file) void saveImage(file)
+            if (imageInput.current) imageInput.current.value = ''
+          }}
+        />
+        <div className="form-actions">
+          {project.hasImage && (
+            <button className="btn btn-ghost btn-danger" disabled={project.archived} onClick={removeImage}>
+              Remove image
+            </button>
+          )}
+          <button
+            className="btn btn-primary"
+            disabled={project.archived}
+            onClick={() => imageInput.current?.click()}
+          >
+            {project.hasImage ? 'Replace image' : 'Upload image'}
+          </button>
+        </div>
       </div>
 
       <div className="card danger-zone">

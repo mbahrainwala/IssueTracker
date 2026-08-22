@@ -12,9 +12,14 @@ public class AppProperties {
     private final Cors cors = new Cors();
     private final Attachments attachments = new Attachments();
     private final Branding branding = new Branding();
+    private final Projects projects = new Projects();
 
     public Branding getBranding() {
         return branding;
+    }
+
+    public Projects getProjects() {
+        return projects;
     }
 
     public Jwt getJwt() {
@@ -150,6 +155,31 @@ public class AppProperties {
 
         public void setMaxLogoBytes(long maxLogoBytes) {
             this.maxLogoBytes = maxLogoBytes;
+        }
+    }
+
+    /**
+     * Project pictures. Like the logo, these are files on disk and the directory must sit
+     * outside {@link Attachments#getDirectory()} or the nightly sweep would delete them.
+     */
+    public static class Projects {
+        private String imageDirectory = "data/project-images";
+        private long maxImageBytes = 1024L * 1024;
+
+        public String getImageDirectory() {
+            return imageDirectory;
+        }
+
+        public void setImageDirectory(String imageDirectory) {
+            this.imageDirectory = imageDirectory;
+        }
+
+        public long getMaxImageBytes() {
+            return maxImageBytes;
+        }
+
+        public void setMaxImageBytes(long maxImageBytes) {
+            this.maxImageBytes = maxImageBytes;
         }
     }
 }

@@ -36,24 +36,14 @@ public class BrandingLogoStore {
     private final Path attachmentRoot;
 
     public BrandingLogoStore(AppProperties properties) {
-        this.root = Path.of(properties.getBranding().getDirectory()).toAbsolutePath().normalize();
-        this.attachmentRoot =
-                Path.of(properties.getAttachments().getDirectory()).toAbsolutePath().normalize();
+        this.root = ManagedDirectory.resolve(properties.getBranding().getDirectory());
+        this.attachmentRoot = ManagedDirectory.resolve(properties.getAttachments().getDirectory());
     }
 
-    /**
-     * Refuses to start when the logo would sit inside the swept attachment directory. This is
-     * a configuration mistake that would otherwise look fine for six hours and then silently
-     * delete the logo, so it fails loudly at boot instead.
-     */
+    /** Refuses to start when the logo would sit in the swept attachment directory. */
     @PostConstruct
     void rejectSharedDirectory() {
-        if (root.equals(attachmentRoot) || root.startsWith(attachmentRoot)) {
-            throw new IllegalStateException(
-                    ("app.branding.directory (%s) must not sit inside app.attachments.directory (%s) - "
-                            + "the nightly orphan sweep would delete the logo")
-                            .formatted(root, attachmentRoot));
-        }
+        ManagedDirectory.rejectInsideAttachments(root, attachmentRoot, "app.branding.directory");
     }
 
     public Optional<byte[]> read() {

@@ -8,7 +8,9 @@ import behrainwala.issuetracker.dto.ProjectDtos.UpdateProjectRequest;
 import behrainwala.issuetracker.service.ProjectService;
 import behrainwala.issuetracker.service.UserService;
 import jakarta.validation.Valid;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -20,6 +22,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 
@@ -79,6 +82,40 @@ public class ProjectController {
     @GetMapping("/{projectKey}/members")
     public List<MemberDto> members(@PathVariable String projectKey, Authentication auth) {
         return projectService.listMembers(projectKey, userService.currentUser(auth));
+    }
+
+    /**
+     * The project picture. Requires read access to the project, so unlike the company logo
+     * this cannot be a plain {@code <img src>} - the client fetches it with its token.
+     * <p>
+     * Served with its real type because it has to render, but with sniffing off and a CSP
+     * that denies everything and sandboxes the document, so an uploaded SVG opened directly
+     * is a picture rather than a scripting context.
+     */
+    @GetMapping("/{projectKey}/image")
+    public ResponseEntity<byte[]> image(@PathVariable String projectKey, Authentication auth) {
+        ProjectService.ProjectImage image =
+                projectService.image(projectKey, userService.currentUser(auth));
+        return ResponseEntity.ok()
+                .contentType(MediaType.parseMediaType(image.contentType()))
+                .header("X-Content-Type-Options", "nosniff")
+                .header("Content-Security-Policy", "default-src 'none'; sandbox")
+                // Per-user authorised, so a shared cache must not hold it; the client
+                // cache-busts with the version from the project payload.
+                .header(HttpHeaders.CACHE_CONTROL, "private, max-age=3600")
+                .body(image.bytes());
+    }
+
+    @PutMapping("/{projectKey}/image")
+    public ProjectDto setImage(@PathVariable String projectKey,
+                               @RequestParam("file") MultipartFile file,
+                               Authentication auth) {
+        return projectService.setImage(projectKey, file, userService.currentUser(auth));
+    }
+
+    @DeleteMapping("/{projectKey}/image")
+    public ProjectDto clearImage(@PathVariable String projectKey, Authentication auth) {
+        return projectService.clearImage(projectKey, userService.currentUser(auth));
     }
 
     @PostMapping("/{projectKey}/members")

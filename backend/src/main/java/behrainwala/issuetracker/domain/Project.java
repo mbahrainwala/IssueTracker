@@ -44,6 +44,20 @@ public class Project extends Auditable {
     @JoinColumn(name = "archived_by_id")
     private User archivedBy;
 
+    /**
+     * The project picture is a file on disk named after this project's id; these columns are
+     * all the database keeps. A non-null content type is what "has an image" means.
+     */
+    @Column(name = "image_content_type", length = 100)
+    private String imageContentType;
+
+    @Column(name = "image_filename", length = 255)
+    private String imageFilename;
+
+    /** Doubles as the cache-busting version the browser sees in the image URL. */
+    @Column(name = "image_updated_at")
+    private Instant imageUpdatedAt;
+
     /** Last issued ticket number for this project; incremented under a row lock. */
     @Column(name = "ticket_seq", nullable = false)
     private long ticketSeq = 0L;
@@ -112,6 +126,35 @@ public class Project extends Auditable {
     public void restore() {
         this.archivedAt = null;
         this.archivedBy = null;
+    }
+
+    /** Records that a picture is present. The bytes themselves go through ProjectImageStore. */
+    public void setImageMetadata(String contentType, String filename) {
+        this.imageContentType = contentType;
+        this.imageFilename = filename;
+        this.imageUpdatedAt = Instant.now();
+    }
+
+    public void clearImageMetadata() {
+        this.imageContentType = null;
+        this.imageFilename = null;
+        this.imageUpdatedAt = null;
+    }
+
+    public boolean hasImage() {
+        return imageContentType != null;
+    }
+
+    public String getImageContentType() {
+        return imageContentType;
+    }
+
+    public String getImageFilename() {
+        return imageFilename;
+    }
+
+    public Instant getImageUpdatedAt() {
+        return imageUpdatedAt;
     }
 
     public Instant getArchivedAt() {

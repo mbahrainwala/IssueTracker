@@ -39,6 +39,10 @@ export interface Project {
   archived: boolean
   archivedAt: string | null
   archivedBy: User | null
+  /** Optional project picture; false when none has been uploaded. */
+  hasImage: boolean
+  /** Last-updated stamp, appended to the image URL so a replacement is not served stale. */
+  imageVersion: number | null
   createdAt: string
 }
 

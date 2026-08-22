@@ -1,5 +1,6 @@
 package behrainwala.issuetracker.service;
 
+import behrainwala.issuetracker.config.AppProperties;
 import behrainwala.issuetracker.domain.Project;
 import behrainwala.issuetracker.domain.ProjectMember;
 import behrainwala.issuetracker.domain.ProjectRole;
@@ -16,6 +17,7 @@ import behrainwala.issuetracker.web.ConflictException;
 import behrainwala.issuetracker.web.NotFoundException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 
@@ -26,17 +28,26 @@ public class ProjectService {
     private final ProjectRepository projectRepository;
     private final ProjectMemberRepository memberRepository;
     private final TicketRepository ticketRepository;
+    private final ProjectImageStore imageStore;
+    private final ImagePolicy imagePolicy;
+    private final AppProperties.Projects projectSettings;
     private final UserService userService;
     private final AccessGuard accessGuard;
 
     public ProjectService(ProjectRepository projectRepository,
                           ProjectMemberRepository memberRepository,
                           TicketRepository ticketRepository,
+                          ProjectImageStore imageStore,
+                          ImagePolicy imagePolicy,
+                          AppProperties properties,
                           UserService userService,
                           AccessGuard accessGuard) {
         this.projectRepository = projectRepository;
         this.memberRepository = memberRepository;
         this.ticketRepository = ticketRepository;
+        this.imageStore = imageStore;
+        this.imagePolicy = imagePolicy;
+        this.projectSettings = properties.getProjects();
         this.userService = userService;
         this.accessGuard = accessGuard;
     }
@@ -125,6 +136,55 @@ public class ProjectService {
         return toDto(project);
     }
 
+    /**
+     * The project picture, for anyone who can see the project. Unlike the company logo this
+     * is project data, so it is never public - it is fetched with a token like any other read.
+     */
+    public ProjectImage image(String projectKey, User current) {
+        Project project = requireByKey(projectKey);
+        accessGuard.requireView(project, current);
+
+        byte[] bytes = project.hasImage() ? imageStore.read(project.getId()).orElse(null) : null;
+        if (bytes == null) {
+            throw new NotFoundException(project.getProjectKey() + " has no image");
+        }
+        return new ProjectImage(bytes, project.getImageContentType());
+    }
+
+    /** A stored project picture, ready to be streamed back. */
+    public record ProjectImage(byte[] bytes, String contentType) {
+    }
+
+    /**
+     * Sets or replaces the picture. Same rights as renaming the project - a lead or an
+     * administrator - and an archived project refuses it like any other change.
+     */
+    @Transactional
+    public ProjectDto setImage(String projectKey, MultipartFile file, User current) {
+        Project project = requireByKey(projectKey);
+        accessGuard.requireAdmin(project, current);
+
+        ImagePolicy.Image image =
+                imagePolicy.validate(file, projectSettings.getMaxImageBytes(), "A project image");
+
+        // File first: if the metadata update then fails, the row still says there is no image
+        // and the stale file is simply overwritten by the next upload. The reverse order would
+        // advertise an image that is not there.
+        imageStore.write(project.getId(), image.bytes());
+        project.setImageMetadata(image.contentType(), image.filename());
+        return toDto(project);
+    }
+
+    @Transactional
+    public ProjectDto clearImage(String projectKey, User current) {
+        Project project = requireByKey(projectKey);
+        accessGuard.requireAdmin(project, current);
+
+        project.clearImageMetadata();
+        imageStore.delete(project.getId());
+        return toDto(project);
+    }
+
     @Transactional
     public void delete(String projectKey, User current) {
         Project project = requireByKey(projectKey);
@@ -141,6 +201,8 @@ public class ProjectService {
                             .formatted(project.getProjectKey(), tickets, tickets == 1 ? "" : "s"));
         }
         projectRepository.delete(project);
+        // The row is going; its picture should not outlive it on disk.
+        imageStore.delete(project.getId());
     }
 
     public List<MemberDto> listMembers(String projectKey, User current) {

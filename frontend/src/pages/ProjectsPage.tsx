@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { ApiError, api } from '../api/client'
 import type { Project } from '../api/types'
 import Avatar from '../components/Avatar'
+import AuthImage from '../components/AuthImage'
 import Modal from '../components/Modal'
 import { formatDateTime } from '../format'
 
@@ -98,6 +99,13 @@ export default function ProjectsPage() {
                 <span className="muted">{project.ticketCount} tickets</span>
               </div>
               <h3>{project.name}</h3>
+              {project.hasImage && (
+                <AuthImage
+                  className="project-image"
+                  url={api.projectImageUrl(project.projectKey, project.imageVersion)}
+                  alt=""
+                />
+              )}
               <p className="muted project-desc">{project.description || 'No description'}</p>
               <div className="project-card-foot">
                 {project.leads.length === 0 ? (

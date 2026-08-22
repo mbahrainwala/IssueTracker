@@ -58,6 +58,9 @@ public final class ProjectDtos {
             boolean archived,
             Instant archivedAt,
             UserDto archivedBy,
+            boolean hasImage,
+            /** Last-updated stamp, appended to the image URL so a replacement is not cached. */
+            Long imageVersion,
             Instant createdAt) {
 
         public static ProjectDto from(Project project, long ticketCount) {
@@ -71,6 +74,8 @@ public final class ProjectDtos {
                     project.isArchived(),
                     project.getArchivedAt(),
                     UserDto.from(project.getArchivedBy()),
+                    project.hasImage(),
+                    project.getImageUpdatedAt() == null ? null : project.getImageUpdatedAt().toEpochMilli(),
                     project.getCreatedAt());
         }
     }

@@ -362,6 +362,40 @@ never rows, so the worst a bug here could do is remove a file that was about to 
 > harmless — the work is idempotent and each file is judged against the same shared database —
 > but set `ATTACHMENT_SWEEP_CRON=-` on all but one if you would rather it ran once.
 
+## Project images
+
+Every project can have an optional picture, set by a **lead or an administrator** from
+**Settings → Project image**. It appears on the project tile between the name and the
+description, and as a small mark beside the project name on the board. Projects without one look
+exactly as they did before — nothing is reserved for it.
+
+| | |
+|---|---|
+| `GET /api/projects/{key}/image` | any member — the image itself |
+| `PUT /api/projects/{key}/image` | `LEAD` or `ADMIN` — set or replace |
+| `DELETE /api/projects/{key}/image` | `LEAD` or `ADMIN` — remove |
+
+**Unlike the company logo, this one is not public.** A project picture is project data, so the
+endpoint runs the same membership check as reading the project: a non-member gets `403` and an
+anonymous caller `401`. That has a consequence in the UI — a plain `<img src>` carries no bearer
+token, so the `AuthImage` component fetches the bytes and hands the tag an object URL, revoking
+it on unmount so a long list of tiles does not leak one blob per card.
+
+Setting an image needs the same rights as renaming the project, and an archived project refuses
+it with `409` like any other change. `hasImage` and `imageVersion` ride along on the ordinary
+project payloads, so a list of tiles needs no extra round trip to know what to draw.
+
+The file lives under `PROJECT_IMAGE_DIR` (default `data/project-images`), **named after the
+project id**. That is deliberate: a project has at most one picture, so replacing it overwrites
+in place — there is no key to store, no second file to clean up, and no way to leave an orphan
+behind. Deleting the project deletes the file with it. The same directory rule as the logo
+applies, and is enforced the same way: **the app refuses to start** if `app.projects.image-directory`
+sits inside the swept attachment directory.
+
+Uploads go through the same `ImagePolicy` as the company logo — PNG, JPEG, GIF, WebP or SVG up
+to 1 MB (`PROJECT_MAX_IMAGE_BYTES`), screened for executable content by magic bytes — and are
+served with `nosniff` and `default-src 'none'; sandbox` for the same reason.
+
 ## Branding
 
 An administrator can put the company name and logo in the title bar from **Branding** in the top
@@ -615,7 +649,10 @@ All routes require `Authorization: Bearer <token>` except `/api/auth/register` a
 | `POST`   | `/api/projects`                         | Create a project                 |
 | `GET`    | `/api/projects/{key}`                   | Project detail                   |
 | `PUT`    | `/api/projects/{key}`                   | Update a project                 |
-| `DELETE` | `/api/projects/{key}`                   | Delete a project                 |
+| `DELETE` | `/api/projects/{key}`                   | Delete a project (must be empty) |
+| `GET`    | `/api/projects/{key}/image`             | Project image (members only)     |
+| `PUT`    | `/api/projects/{key}/image`             | Set the image (`LEAD`/`ADMIN`)   |
+| `DELETE` | `/api/projects/{key}/image`             | Remove the image                 |
 | `GET`    | `/api/projects/{key}/members`           | List members                     |
 | `POST`   | `/api/projects/{key}/members`           | Add / change a member's role     |
 | `DELETE` | `/api/projects/{key}/members/{userId}`  | Remove a member                  |

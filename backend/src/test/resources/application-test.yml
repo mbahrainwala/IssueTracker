@@ -20,3 +20,5 @@ app:
   branding:
     # A sibling of the attachment directory, never inside it.
     directory: ${java.io.tmpdir}/issuetracker-test-branding
+  projects:
+    image-directory: ${java.io.tmpdir}/issuetracker-test-project-images
