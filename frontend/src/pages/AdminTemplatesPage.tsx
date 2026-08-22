@@ -154,6 +154,8 @@ function TemplateModal({
   )
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  /** Board and starter tickets are separate tabs; together they are far too tall to scroll. */
+  const [tab, setTab] = useState<'board' | 'tickets'>('board')
 
   function updateStarter(index: number, patch: Partial<StarterTicketInput>) {
     setStarters(starters.map((s, i) => (i === index ? { ...s, ...patch } : s)))
@@ -161,6 +163,16 @@ function TemplateModal({
 
   async function submit(e: React.FormEvent) {
     e.preventDefault()
+
+    // The name lives on the Board tab, so it can be off-screen when Save is pressed. Native
+    // `required` would refuse to submit and refuse to say why - the browser cannot focus a
+    // field that is not rendered - so the check is explicit and switches to the tab holding it.
+    if (!name.trim()) {
+      setTab('board')
+      setError('A template needs a name')
+      return
+    }
+
     setBusy(true)
     setError(null)
     try {
@@ -186,30 +198,57 @@ function TemplateModal({
   return (
     <Modal title={template ? `Edit ${template.name}` : 'New template'} onClose={onClose}>
       <form className="form" onSubmit={submit}>
-        <label>
-          Name
-          <input value={name} onChange={(e) => setName(e.target.value)} maxLength={120} required autoFocus />
-        </label>
-        <label>
-          Description
-          <input
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            maxLength={1000}
-            placeholder="What kind of work is this board for?"
-          />
-        </label>
-        <div>
-          <label>Lanes</label>
-          <LaneEditor lanes={lanes} onChange={setLanes} disabled={busy} />
+        <div className="segmented modal-tabs">
+          <button
+            type="button"
+            className={tab === 'board' ? 'seg seg-active' : 'seg'}
+            onClick={() => setTab('board')}
+          >
+            Board
+          </button>
+          <button
+            type="button"
+            className={tab === 'tickets' ? 'seg seg-active' : 'seg'}
+            onClick={() => setTab('tickets')}
+          >
+            Starter tickets{starters.length > 0 ? ` (${starters.length})` : ''}
+          </button>
         </div>
 
-        <div>
-          <label>Starter tickets</label>
+        {/* Every field's value lives in this component's state, not in the DOM, so hiding a
+            tab never loses an edit and Save submits both tabs whichever one is showing. */}
+        {tab === 'board' && (
+          <>
+            <label>
+              Name
+              <input value={name} onChange={(e) => setName(e.target.value)} maxLength={120} autoFocus />
+            </label>
+            <label>
+              Description
+              <input
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                maxLength={1000}
+                placeholder="What kind of work is this board for?"
+              />
+            </label>
+            <div>
+              <label>Lanes</label>
+              <LaneEditor lanes={lanes} onChange={setLanes} disabled={busy} />
+            </div>
+          </>
+        )}
+
+        <div hidden={tab !== 'tickets'}>
           <p className="muted">
             Created in every project made from this template — the work this kind of project
             always begins with. They are ordinary tickets from then on.
           </p>
+          {starters.length === 0 && (
+            <p className="muted">
+              None yet. This template creates a board and no tickets.
+            </p>
+          )}
           <ol className="starter-list">
             {starters.map((starter, index) => (
               <li key={index} className="starter-row">

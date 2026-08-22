@@ -546,6 +546,9 @@ label input, label select, label textarea { font-weight: 400; color: var(--text)
   color: var(--primary);
 }
 
+/* Tabs inside a dialog, so a long form does not become one long scroll. */
+.modal-tabs { align-self: flex-start; margin-bottom: 4px; }
+
 /* Starter tickets: what a template creates in every project made from it. */
 .starter-list { list-style: none; margin: 0 0 8px; padding: 0; display: flex; flex-direction: column; gap: 8px; }
 .starter-row {
